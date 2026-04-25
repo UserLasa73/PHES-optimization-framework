@@ -1,0 +1,9 @@
+List of all your Python library dependencies = 
+    NumPy
+    Pandas
+    SciPy
+    PVlib
+    DEAP
+    scikit-learn
+    xgboost
+    Streamlit
