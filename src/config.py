@@ -8,6 +8,10 @@ PHYSICS_PARAMS = {
     "evap_rate_mm_day": 5.0,  # mm/day
 }
 
+SYSTEM_CONSTANTS = {
+    "total_water_volume": 5000.0, # The fixed total volume of the system (m3)
+}
+
 # The initial "Design" the optimizer might test
 DEFAULT_DESIGN = {
     "v_max": 5000.0,

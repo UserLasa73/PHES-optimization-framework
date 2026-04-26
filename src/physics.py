@@ -1,7 +1,7 @@
 # The core simulator (equations, hourly flows)# src/physics.py
 from .config import PHYSICS_PARAMS
 
-def simulate_one_hour(design, current_soc, solar_input, load_demand):
+def simulate_one_hour(design, current_soc, solar_input, load_demand,total_vol):
     """
     Simulates 1 hour of PHES operation.
     """
@@ -13,6 +13,15 @@ def simulate_one_hour(design, current_soc, solar_input, load_demand):
     
     # 3. Simple Logic: If solar > load, PUMP. If solar < load, GENERATE.
     net_power = solar_input - load_demand
+
+    # 4. Track the lower reservoir
+    v_upper = current_soc
+    v_lower = total_vol - v_upper
+    
+    # 5. Safety Check: Does the lower reservoir have enough water to pump?
+    if net_power > 0 and v_lower < design['v_dead']:
+        status = "Blocked: Lower Reservoir Empty"
+        return v_upper, status # Cannot pump
     
     # A. Pumping Mode
     if net_power > 0 and new_soc < design['v_max']:
