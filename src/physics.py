@@ -16,6 +16,8 @@ def simulate_one_hour(design):
     # 2. Net Power calculation
     net_power = (design['solar_input']) - (design['load_demand']) #in Kw
     
+    energy_pumped = 0.0
+    energy_generated = 0.0
 
     status = "Idle"
     
@@ -27,6 +29,7 @@ def simulate_one_hour(design):
             max_flow_power_per_hour=max_flow_power_per_second*3600
             max_flow_space = design['v_max'] - design['v_upper']
             flow = min(max_flow_power_per_hour, max_flow_space, design['v_lower'] - design['v_dead'])
+            energy_pumped = flow * (PHYSICS_PARAMS['rho'] * PHYSICS_PARAMS['g'] * design['h_gross']) / 1000 # kWh
             
             design['v_upper'] += flow
             design['v_lower'] -= flow
@@ -40,9 +43,10 @@ def simulate_one_hour(design):
             max_flow_power_per_hour=max_flow_power_per_second*3600
             max_flow_water = design['v_upper'] - design['v_dead']
             flow = min(max_flow_power_per_hour, max_flow_water)
+            energy_generated = flow * (PHYSICS_PARAMS['rho'] * PHYSICS_PARAMS['g'] * design['h_gross']) / 1000 # kWh
             
             design['v_upper'] -= flow
             design['v_lower'] += flow
             status = "Generating"
             
-    return design['v_upper'], design['v_lower'], status
+    return design['v_upper'], design['v_lower'], status, energy_pumped, energy_generated

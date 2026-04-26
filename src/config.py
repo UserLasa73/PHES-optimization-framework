@@ -24,5 +24,5 @@ DEFAULT_DESIGN = {
     "v_upper":1000.0, 
     "v_lower":4000.0, 
     "solar_input":30.0, 
-    "load_demand":29.0
+    "load_demand":20.0
 }
