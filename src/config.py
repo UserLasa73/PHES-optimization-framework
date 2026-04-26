@@ -6,6 +6,8 @@ PHYSICS_PARAMS = {
     "g": 9.81,              # Gravity (m/s2)
     "pipe_roughness": 0.0015, # mm (PVC)
     "evap_rate_mm_day": 5.0,  # mm/day
+    "min_pump_threshold_kw": 5.0,
+    "min_gen_threshold_kw": 5.0,
 }
 
 SYSTEM_CONSTANTS = {
@@ -22,5 +24,5 @@ DEFAULT_DESIGN = {
     "v_upper":1000.0, 
     "v_lower":4000.0, 
     "solar_input":30.0, 
-    "load_demand":20.0
+    "load_demand":29.0
 }

@@ -14,13 +14,13 @@ def simulate_one_hour(design):
     # (or we consider it lost from the system - let's assume it's lost from design['v_upper'])
 
     # 2. Net Power calculation
-
-    net_power = (design['solar_input']*1000) - (design['load_demand']*1000) #in watts
+    net_power = (design['solar_input']) - (design['load_demand']) #in Kw
     
+
     status = "Idle"
     
     # 3. Pumping Mode (Solar excess)
-    if net_power > 0:
+    if net_power > PHYSICS_PARAMS['min_pump_threshold_kw']:
         if design['v_lower'] > design['v_dead'] and design['v_upper'] < design['v_max']:
             # Max flow constrained by pump power and available space in upper reservoir
             max_flow_power_per_second= net_power / (PHYSICS_PARAMS['rho'] * PHYSICS_PARAMS['g'] * design['h_gross'])
@@ -33,7 +33,7 @@ def simulate_one_hour(design):
             status = "Pumping"
             
     # 4. Generation Mode (Solar deficit)
-    elif net_power < 0:
+    elif net_power < -PHYSICS_PARAMS['min_gen_threshold_kw']: #net deficit is a negative number when demand is higher than solar load
         if design['v_upper'] > design['v_dead']:
             # Max flow constrained by turbine power and available water in upper reservoir
             max_flow_power_per_second = abs(net_power) / (PHYSICS_PARAMS['rho'] * PHYSICS_PARAMS['g'] * design['h_gross'])
