@@ -1,6 +1,4 @@
-# src/config.py
 
-# This makes it easy to edit parameters in one place without touching the physics code
 PHYSICS_PARAMS = {
     "rho": 1000.0,          # Water density (kg/m3)
     "g": 9.81,              # Gravity (m/s2)
@@ -14,10 +12,6 @@ PHYSICS_PARAMS = {
     "seepage_rate_per_hour": 0.0001, # e.g., 0.01% loss per hour
     "min_pump_threshold_kw": 5.0,
     "min_gen_threshold_kw": 5.0,
-}
-
-SYSTEM_CONSTANTS = {
-    "total_water_volume": 5000.0, # The fixed total volume of the system (m3)
 }
 
 # The initial "Design" the optimizer might test
