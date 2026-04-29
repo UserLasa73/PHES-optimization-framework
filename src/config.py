@@ -20,9 +20,5 @@ DEFAULT_DESIGN = {
     "v_dead": 250.0,
     "h_gross": 20.0,
     "d_pipe": 0.3,
-    "surface_area": 500.0,
-    "v_upper":1000.0, 
-    "v_lower":4000.0, 
-    "solar_input":30.0, #per hour
-    "load_demand":20.0
+    "surface_area": 500.0
 }
