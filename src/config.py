@@ -4,9 +4,9 @@
 PHYSICS_PARAMS = {
     "rho": 1000.0,          # Water density (kg/m3)
     "g": 9.81,              # Gravity (m/s2)
-    "pipe_friction_coeff": 0.02,  # Darcy friction factor
-    "pipe_length": 100.0,         # meters
-    "d_pipe": 0.3,                # diameter
+    "pipe_friction_coeff": 0.02,  # Darcy friction factor (f)
+    "pipe_length": 100.0,         # meters (L)
+    "d_pipe": 0.3,                # diameter (D)
     "pump_efficiency": 0.75,      # 75% efficient
     "turbine_efficiency": 0.85,   # 85% efficient
     "pipe_roughness": 0.0015, # mm (PVC)
