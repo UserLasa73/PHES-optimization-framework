@@ -13,7 +13,12 @@ def simulate_one_hour(design,v_upper, v_lower, solar_input, load_demand):
     # The lower reservoir gains the evaporated water implicitly 
     # (or we consider it lost from the system - let's assume it's lost from v_upper)
 
-    # 2. Net Power calculation
+    #2.Apply Seepage Loss (Before anything else)
+    # The water that leaks out is gone from the upper reservoir
+    seepage = v_upper * PHYSICS_PARAMS['seepage_rate_per_hour']
+    v_upper -= seepage
+
+    #3. Net Power calculation
     net_power = (solar_input) - (load_demand) #in Kw
     
     energy_pumped = 0.0
@@ -21,7 +26,7 @@ def simulate_one_hour(design,v_upper, v_lower, solar_input, load_demand):
 
     status = "Idle"
     
-    # 3. Pumping Mode (Solar excess)
+    # 4. Pumping Mode (Solar excess)
     if net_power > PHYSICS_PARAMS['min_pump_threshold_kw']:
         if v_lower > design['v_dead'] and v_upper < design['v_max']:
             # Max flow constrained by pump power and available space in upper reservoir
@@ -35,7 +40,7 @@ def simulate_one_hour(design,v_upper, v_lower, solar_input, load_demand):
             v_lower -= flow
             status = "Pumping"
             
-    # 4. Generation Mode (Solar deficit)
+    # 5. Generation Mode (Solar deficit)
     elif net_power < -PHYSICS_PARAMS['min_gen_threshold_kw']: #net deficit is a negative number when demand is higher than solar load
         if v_upper > design['v_dead']:
             # Max flow constrained by turbine power and available water in upper reservoir
