@@ -15,8 +15,8 @@ for t in range(8760):
 
 efficiency = (total_generated / total_pumped) * 100
 
-print(f"--- 1-Hour Simulation Result ---")
+print(f"--- 8760-Hour Simulation Result ---")
 print(f"Status: {status}, Upper: {v_upper:.2f}, Lower: {v_lower:.2f}")
-print(f"pumped Energy: {pumpedEnergy:.2f}Kwh")
-print(f"generated Energy: {generatedEnergy:.2f}Kwh")
+print(f"pumped Energy: {total_pumped:.2f}Kwh")
+print(f"generated Energy: {total_generated:.2f}Kwh")
 print(f"Total Round Trip Efficiency: {efficiency:.2f}%")
