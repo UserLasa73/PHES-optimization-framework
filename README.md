@@ -6,7 +6,7 @@ Project Title
 Plan
     May Phase (The Build):
     - Weeks 1-2: Finalize the physics-based Python simulator for hourly energy flows.
-    - Weeks 3-4:** Generate your training dataset (2000–5000 samples) using Latin Hypercube Sampling.
+    - Weeks 3-4: Generate training dataset (2000–5000 samples) using Latin Hypercube Sampling.
     June Phase (The Intelligence & Polish):
     - Weeks 1-2: Train, validate, and tune the XGBoost surrogate models to ensure R2>0.95.
     - Week 3: Integrate the surrogate with the NSGA-II algorithm and finalize the Streamlit web interface.
