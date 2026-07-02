@@ -22,3 +22,8 @@ DEFAULT_DESIGN = {
     "d_pipe": 0.3,
     "surface_area": 500.0
 }
+
+# New PVlib settings
+LOCATION_LAT = 8.75      # Vavuniya
+LOCATION_LON = 80.5
+PV_CAPACITY_KW = 10.0
