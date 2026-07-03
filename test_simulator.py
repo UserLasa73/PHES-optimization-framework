@@ -1,0 +1,100 @@
+"""
+test_simulator.py
+Quick test to verify simulator works with your code.
+"""
+
+import numpy as np
+from user_inputs import UserInputs
+from simulator import PumpedHydroSimulator
+
+# ===== 1. CREATE USER INPUTS (from proposal) =====
+user = UserInputs()
+user.location = "Vavuniya"
+user.latitude = 8.9
+user.longitude = 79.9
+user.pv_kwp = 30.0
+user.tilt_angle = 10.0
+user.azimuth_angle = 0.0
+user.daily_energy_kwh = 50.0
+user.upper_reservoir_type = "new_tank"
+user.lower_reservoir_type = "new_tank"
+user.autonomy_days = 2.0
+user.evaporation_rate_mm_month = 50.0
+user.demand_spike_factor = 1.0
+user.has_grid_backup = False
+
+# ===== 2. CREATE A DESIGN TO TEST =====
+design = {
+    'head_m': 20.0,
+    'volume_m3': 2000.0,
+    'pipe_diameter_m': 0.25,
+    'pump_power_kw': 20.0,
+    'turbine_power_kw': 15.0
+}
+
+# ===== 3. GENERATE TEST DATA =====
+hours = 8760
+hour_of_day = np.arange(hours) % 24
+
+# Solar (simplified)
+solar = np.zeros(hours)
+daytime = (hour_of_day >= 6) & (hour_of_day <= 18)
+solar[daytime] = np.sin(np.pi * (hour_of_day[daytime] - 6) / 12) * user.pv_kwp
+solar = solar * np.random.uniform(0.4, 1.0, hours)
+
+# Load (simplified)
+base_load = user.daily_energy_kwh / 24.0
+load = np.ones(hours) * base_load
+morning = (hour_of_day >= 6) & (hour_of_day <= 8)
+load[morning] = base_load * 1.8
+evening = (hour_of_day >= 18) & (hour_of_day <= 22)
+load[evening] = base_load * 2.2
+load = load * np.random.uniform(0.85, 1.15, hours)
+
+print("=" * 60)
+print("PUMPED HYDRO SIMULATOR TEST")
+print("=" * 60)
+print(f"Total Solar: {sum(solar):.0f} kWh/year")
+print(f"Total Load: {sum(load):.0f} kWh/year")
+print(f"PV Size: {user.pv_kwp} kWp")
+print(f"Head: {design['head_m']} m")
+print(f"Volume: {design['volume_m3']} m³")
+print(f"Reservoir Types: {user.upper_reservoir_type} / {user.lower_reservoir_type}")
+
+# ===== 4. RUN SIMULATION =====
+print("\n🔄 Running simulation...")
+sim = PumpedHydroSimulator(user, design)
+results = sim.simulate(solar, load)
+
+# ===== 5. DISPLAY RESULTS =====
+metrics = results['metrics']
+
+print("\n" + "=" * 60)
+print("RESULTS")
+print("=" * 60)
+print(f"Efficiency: {metrics['efficiency_percent']:.1f}%")
+print(f"Autonomy: {metrics['autonomy_days']:.1f} days (needed: {user.autonomy_days} days)")
+print(f"Autonomy Met: {'✅ YES' if metrics['autonomy_met'] else '❌ NO'}")
+print(f"Capital Cost: {metrics['capital_cost_lkr']:,.0f} LKR")
+print(f"\nEnergy Summary:")
+print(f"  Pumped: {metrics['total_pumped_kwh']:.0f} kWh")
+print(f"  Generated: {metrics['total_generated_kwh']:.0f} kWh")
+print(f"  Unmet Load: {metrics['total_unmet_kwh']:.0f} kWh")
+print(f"  Curtailed: {metrics['total_curtailed_kwh']:.0f} kWh")
+print(f"  Grid Used: {metrics['grid_used_kwh']:.0f} kWh")
+print(f"\nFinal Reservoir Levels:")
+print(f"  Upper: {(sim.upper_volume / sim.max_upper * 100):.1f}%")
+print(f"  Lower: {(sim.lower_volume / sim.max_lower * 100):.1f}%")
+
+# ===== 6. SHOW FIRST 24 HOURS =====
+print("\n" + "=" * 60)
+print("FIRST 24 HOURS")
+print("=" * 60)
+print(f"{'Hour':<6} {'Solar':<8} {'Load':<8} {'Upper%':<8} {'State':<15}")
+print("-" * 50)
+
+for i in range(24):
+    h = sim.history
+    state = h['state'][i][:15] if len(h['state'][i]) > 15 else h['state'][i]
+    upper_pct = (h['upper_volume'][i] / sim.max_upper) * 100
+    print(f"{i:<6} {h['solar_power'][i]:<8.1f} {h['load_power'][i]:<8.1f} {upper_pct:<8.1f} {state:<15}")
