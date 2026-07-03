@@ -19,3 +19,16 @@ def pump_flow_rate(pump_power_kw, head_m, efficiency=PUMP_EFFICIENCY):
     flow_rate = (power_w * efficiency) / (WATER_DENSITY * GRAVITY * head_m)
     return flow_rate
 
+def turbine_power(flow_rate_m3s, head_m, efficiency=TURBINE_EFFICIENCY):
+    """
+    Calculate electrical power from water flow
+    Inputs:
+        flow_rate_m3s: water flow in cubic meters per second
+        head_m: head height in meters
+        efficiency: turbine efficiency (default 0.90)
+    Returns:
+        power_kw: electrical power in kilowatts
+    """
+    power_w = WATER_DENSITY * GRAVITY * head_m * flow_rate_m3s * efficiency
+    power_kw = power_w / 1000  # Convert Watts to kW
+    return power_kw
