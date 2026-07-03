@@ -21,3 +21,11 @@ MONTHLY_EVAPORATION = 0.03    # 3% evaporation per month
 # Minimum water level (can't go below this)
 MIN_WATER_PERCENT = 0.10      # 10%
 MAX_WATER_PERCENT = 0.95      # 95% (leave some space)
+
+# SEEPAGE LOSSES (simple)
+SEEPAGE_LOSS = {
+    "new_tank": 0.0,      # 0% per month
+    "excavated": 0.05,    # 5% per month
+    "pond": 0.10,         # 10% per month
+    "river": 0.20         # 20% per month
+}
