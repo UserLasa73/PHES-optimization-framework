@@ -67,3 +67,32 @@ def darcy_weisbach_loss(flow_rate_m3s, diameter_m, length_m, roughness_m=PIPE_RO
     head_loss = f * (length_m / diameter_m) * (velocity ** 2) / (2 * GRAVITY)
     
     return head_loss
+
+def calculate_capex(volume_m3, head_m, pipe_diameter_m, pump_power_kw, turbine_power_kw, pv_kwp):
+    """
+    Calculate estimated capital cost in LKR
+    Simple parametric cost model
+    """
+    # Reservoir cost: LKR 1000 per cubic meter
+    reservoir_cost = volume_m3 * 1000
+    
+    # Pump cost: LKR 1000 per kW
+    pump_cost = pump_power_kw * 1000
+    
+    # Turbine cost: LKR 1000 per kW
+    turbine_cost = turbine_power_kw * 1000
+    
+    # Pipe cost: LKR 500 per meter (2x for up and down)
+    pipe_length = head_m * 3  # Estimate pipe length as 3x head
+    pipe_cost = pipe_length * 2 * 500  # 2 pipes (up and down)
+    
+    # PV cost: LKR 100,000 per kWp
+    pv_cost = pv_kwp * 100000
+    
+    # Civil works: 30% of equipment cost
+    equipment_cost = reservoir_cost + pump_cost + turbine_cost + pipe_cost + pv_cost
+    civil_cost = equipment_cost * 0.30
+    
+    total_cost = equipment_cost + civil_cost
+    
+    return total_cost
