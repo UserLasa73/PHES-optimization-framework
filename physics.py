@@ -339,3 +339,25 @@ def apply_seepage_loss(volume_m3: float, reservoir_type: str) -> float:
     loss = volume_m3 * factor
     return max(0.0, volume_m3 - loss)
 
+# ============================================================================
+# COST CALCULATIONS
+# ============================================================================
+
+def get_reservoir_cost_factor(reservoir_type: str) -> float:
+    """
+    Get cost factor for reservoir type.
+    
+    Args:
+        reservoir_type: 'new_tank', 'excavated', 'pond', or 'river'
+    
+    Returns:
+        Cost multiplier (1.0 = base cost)
+    """
+    cost_factors = {
+        "new_tank": 1.0,       # Full cost (concrete tank)
+        "excavated": 0.6,      # 60% of full cost
+        "pond": 0.3,           # 30% of full cost
+        "river": 0.1           # 10% of full cost (natural river)
+    }
+    
+    return cost_factors.get(reservoir_type, 1.0)
