@@ -299,3 +299,43 @@ def calculate_round_trip_efficiency(pumped_energy_kwh: float,
     efficiency = (generated_energy_kwh / pumped_energy_kwh) * 100.0
     
     return min(100.0, max(0.0, efficiency))
+
+# ============================================================================
+# SEEPAGE CALCULATIONS
+# ============================================================================
+
+def get_seepage_loss_factor(reservoir_type: str) -> float:
+    """
+    Get seepage loss factor for reservoir type.
+    
+    Args:
+        reservoir_type: 'new_tank', 'excavated', 'pond', or 'river'
+    
+    Returns:
+        Monthly seepage loss as fraction (0.0 to 1.0)
+    """
+    seepage_factors = {
+        "new_tank": 0.00,      # 0% per month
+        "excavated": 0.05,     # 5% per month
+        "pond": 0.10,          # 10% per month
+        "river": 0.20          # 20% per month
+    }
+    
+    return seepage_factors.get(reservoir_type, 0.00)
+
+
+def apply_seepage_loss(volume_m3: float, reservoir_type: str) -> float:
+    """
+    Apply monthly seepage loss to reservoir volume.
+    
+    Args:
+        volume_m3: Current water volume
+        reservoir_type: Type of reservoir
+    
+    Returns:
+        Water volume after seepage loss
+    """
+    factor = get_seepage_loss_factor(reservoir_type)
+    loss = volume_m3 * factor
+    return max(0.0, volume_m3 - loss)
+
