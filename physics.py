@@ -361,3 +361,64 @@ def get_reservoir_cost_factor(reservoir_type: str) -> float:
     }
     
     return cost_factors.get(reservoir_type, 1.0)
+
+
+def calculate_water_velocity(flow_rate_m3s: float, pipe_diameter_m: float) -> float:
+    """
+    Calculate water velocity in pipe.
+    
+    Formula: V = Q / A = Q / (π × (D/2)²)
+    
+    Args:
+        flow_rate_m3s: Flow rate in m³/s
+        pipe_diameter_m: Pipe diameter in meters
+    
+    Returns:
+        Velocity in m/s
+    """
+    if flow_rate_m3s <= 0 or pipe_diameter_m <= 0:
+        return 0.0
+    
+    area = math.pi * (pipe_diameter_m / 2.0) ** 2.0
+    velocity = flow_rate_m3s / area
+    
+    return velocity
+
+
+def check_velocity_limit(flow_rate_m3s: float, pipe_diameter_m: float, 
+                          max_velocity: float = 5.0) -> bool:
+    """
+    Check if water velocity exceeds maximum allowable.
+    
+    Args:
+        flow_rate_m3s: Flow rate in m³/s
+        pipe_diameter_m: Pipe diameter in meters
+        max_velocity: Maximum allowable velocity (m/s) (default: 5.0)
+    
+    Returns:
+        True if velocity is within limit
+    """
+    velocity = calculate_water_velocity(flow_rate_m3s, pipe_diameter_m)
+    return velocity <= max_velocity
+
+# ============================================================================
+# AUTONOMY CALCULATIONS
+# ============================================================================
+
+def calculate_autonomy_days(stored_energy_kwh: float, 
+                             daily_load_kwh: float) -> float:
+    """
+    Calculate autonomy in days.
+    
+    Args:
+        stored_energy_kwh: Energy stored in upper reservoir (kWh)
+        daily_load_kwh: Average daily load (kWh/day)
+    
+    Returns:
+        Autonomy in days
+    """
+    if daily_load_kwh <= 0:
+        return 0.0
+    
+    return stored_energy_kwh / daily_load_kwh
+
