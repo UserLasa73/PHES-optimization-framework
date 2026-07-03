@@ -96,3 +96,17 @@ def calculate_capex(volume_m3, head_m, pipe_diameter_m, pump_power_kw, turbine_p
     total_cost = equipment_cost + civil_cost
     
     return total_cost
+
+def calculate_efficiency(total_pumped_energy_kwh, total_generated_energy_kwh):
+    """
+    Calculate round-trip efficiency
+    Inputs:
+        total_pumped_energy_kwh: energy used for pumping (kWh)
+        total_generated_energy_kwh: energy generated (kWh)
+    Returns:
+        efficiency: percentage (0-100)
+    """
+    if total_pumped_energy_kwh == 0:
+        return 0
+    efficiency = (total_generated_energy_kwh / total_pumped_energy_kwh) * 100
+    return min(efficiency, 100)  # Cap at 100%
