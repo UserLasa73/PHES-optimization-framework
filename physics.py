@@ -252,3 +252,50 @@ def calculate_evaporation_loss(volume_m3: float,
     # Can't lose more than 50% of available water
     return min(volume_lost, volume_m3 * 0.50)
 
+
+# ============================================================================
+# ENERGY CALCULATIONS
+# ============================================================================
+
+def calculate_stored_energy(water_volume_m3: float, head_m: float) -> float:
+    """
+    Calculate potential energy stored in upper reservoir.
+    
+    Formula: E = ρ × g × H × V × η_turbine
+    
+    Args:
+        water_volume_m3: Water volume in upper reservoir (m³)
+        head_m: Head height (m)
+    
+    Returns:
+        Stored energy in kWh
+    """
+    if water_volume_m3 <= 0 or head_m <= 0:
+        return 0.0
+    
+    energy_joules = WATER_DENSITY * GRAVITY * head_m * water_volume_m3 * TURBINE_EFFICIENCY
+    energy_kwh = energy_joules / 1000.0 / 3600.0  # Joules → kWh
+    
+    return energy_kwh
+
+
+def calculate_round_trip_efficiency(pumped_energy_kwh: float, 
+                                     generated_energy_kwh: float) -> float:
+    """
+    Calculate round-trip efficiency.
+    
+    Formula: η_rt = (E_generated / E_pumped) × 100
+    
+    Args:
+        pumped_energy_kwh: Total energy used for pumping (kWh)
+        generated_energy_kwh: Total energy generated (kWh)
+    
+    Returns:
+        Efficiency percentage (0-100)
+    """
+    if pumped_energy_kwh <= 0:
+        return 0.0
+    
+    efficiency = (generated_energy_kwh / pumped_energy_kwh) * 100.0
+    
+    return min(100.0, max(0.0, efficiency))
