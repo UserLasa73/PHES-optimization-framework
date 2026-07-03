@@ -92,3 +92,67 @@ def calculate_pump_power_from_flow(flow_rate_m3s: float, head_m: float) -> float
 
 
 
+# ============================================================================
+# PIPE FRICTION CALCULATIONS
+# ============================================================================
+
+def calculate_darcy_weisbach_loss(flow_rate_m3s: float, 
+                                   diameter_m: float, 
+                                   length_m: float,
+                                   roughness_m: float = 0.00015) -> float:
+    """
+    Calculate head loss due to pipe friction using Darcy-Weisbach equation.
+    
+    Formula: h_f = f × (L/D) × (V²/2g)
+    
+    Where:
+        h_f = Head loss (m)
+        f = Friction factor (dimensionless)
+        L = Pipe length (m)
+        D = Pipe diameter (m)
+        V = Flow velocity (m/s)
+        g = Gravity (m/s²)
+    
+    Args:
+        flow_rate_m3s: Flow rate in m³/s
+        diameter_m: Pipe internal diameter in meters
+        length_m: Pipe length in meters
+        roughness_m: Pipe wall roughness in meters (default: 0.00015 for steel)
+    
+    Returns:
+        Head loss in meters
+    """
+    if flow_rate_m3s <= 0 or diameter_m <= 0 or length_m <= 0:
+        return 0.0
+    
+    # Cross-sectional area: A = π × (D/2)²
+    area = math.pi * (diameter_m / 2.0) ** 2.0
+    
+    # Flow velocity: V = Q / A
+    velocity = flow_rate_m3s / area
+    
+    # Reynolds number: Re = (V × D) / ν
+    reynolds = velocity * diameter_m / KINEMATIC_VISCOSITY
+    
+    # Calculate friction factor
+    if reynolds < 2000:
+        # Laminar flow: f = 64/Re
+        friction_factor = 64.0 / reynolds
+    elif reynolds < 4000:
+        # Transition zone - use conservative estimate
+        friction_factor = 0.03
+    else:
+        # Turbulent flow - Swamee-Jain approximation
+        # f = 0.25 / [log10(ε/(3.7D) + 5.74/Re^0.9)]²
+        try:
+            friction_factor = 0.25 / (
+                math.log10(roughness_m / (3.7 * diameter_m) + 5.74 / (reynolds ** 0.9))
+            ) ** 2.0
+        except (ValueError, ZeroDivisionError):
+            # Fallback for numerical issues
+            friction_factor = 0.02
+    
+    # Darcy-Weisbach: h_f = f × (L/D) × (V²/2g)
+    head_loss = friction_factor * (length_m / diameter_m) * (velocity ** 2.0) / (2.0 * GRAVITY)
+    
+    return max(0.0, head_loss)
