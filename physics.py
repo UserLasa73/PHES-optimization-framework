@@ -156,3 +156,99 @@ def calculate_darcy_weisbach_loss(flow_rate_m3s: float,
     head_loss = friction_factor * (length_m / diameter_m) * (velocity ** 2.0) / (2.0 * GRAVITY)
     
     return max(0.0, head_loss)
+
+
+def calculate_total_head_loss(flow_rate_m3s: float,
+                               pipe_diameter_m: float,
+                               head_m: float,
+                               roughness_m: float = 0.00015) -> float:
+    """
+    Calculate total head loss including major (friction) and minor losses.
+    
+    Minor losses (bends, valves, etc.) are estimated as 10% of major loss.
+    
+    Args:
+        flow_rate_m3s: Flow rate in m³/s
+        pipe_diameter_m: Pipe diameter in meters
+        head_m: Gross head in meters
+        roughness_m: Pipe roughness in meters
+    
+    Returns:
+        Total head loss in meters
+    """
+    if flow_rate_m3s <= 0:
+        return 0.0
+    
+    # Estimate pipe length (3x head for sloping terrain)
+    pipe_length = head_m * 3.0
+    
+    # Major losses (friction)
+    major_loss = calculate_darcy_weisbach_loss(
+        flow_rate_m3s, 
+        pipe_diameter_m, 
+        pipe_length, 
+        roughness_m
+    )
+    
+    # Minor losses (10% of major loss for bends, valves, etc.)
+    minor_loss = major_loss * 0.10
+    
+    return major_loss + minor_loss
+
+
+# ============================================================================
+# RESERVOIR CALCULATIONS
+# ============================================================================
+
+def estimate_reservoir_surface_area(volume_m3: float, depth_m: float = 3.0) -> float:
+    """
+    Estimate reservoir surface area from volume and depth.
+    
+    Assumes cylindrical shape: Volume = Area × Depth
+    Area = Volume / Depth
+    
+    Args:
+        volume_m3: Reservoir volume in m³
+        depth_m: Reservoir depth in meters (default: 3m)
+    
+    Returns:
+        Surface area in m²
+    """
+    if volume_m3 <= 0 or depth_m <= 0:
+        return 0.0
+    
+    return volume_m3 / depth_m
+
+
+def calculate_evaporation_loss(volume_m3: float,
+                                surface_area_m2: float,
+                                evaporation_rate_mm_month: float,
+                                hours: int) -> float:
+    """
+    Calculate water loss due to evaporation.
+    
+    Args:
+        volume_m3: Current water volume in m³
+        surface_area_m2: Reservoir surface area in m²
+        evaporation_rate_mm_month: Evaporation rate in mm/month
+        hours: Number of hours in the period
+    
+    Returns:
+        Water volume lost in m³
+    """
+    if volume_m3 <= 0 or surface_area_m2 <= 0:
+        return 0.0
+    
+    # Convert mm/month to m/hour
+    days = hours / 24.0
+    months = days / 30.44  # Average month length
+    
+    evap_m_per_month = evaporation_rate_mm_month / 1000.0
+    evap_m_per_hour = evap_m_per_month / (30.44 * 24.0)
+    
+    # Volume lost = surface_area × evaporation_depth
+    volume_lost = surface_area_m2 * evap_m_per_hour * hours
+    
+    # Can't lose more than 50% of available water
+    return min(volume_lost, volume_m3 * 0.50)
+
