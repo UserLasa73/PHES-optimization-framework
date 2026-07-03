@@ -1,30 +1,94 @@
-# physics.py
-# All physics calculations for the pumped hydro system
+"""
+physics.py
+Core physics calculations for Pumped Hydro Energy Storage system.
+All formulas used by the simulator.
+"""
 
 import math
 from constants import *
 
-def water_flow_from_pump(power_kw, height_m):
-    """How much water can a pump move? (m³ per second)"""
-    power_w = power_kw * 1000
-    flow = (power_w * PUMP_EFFICIENCY) / (WATER_DENSITY * GRAVITY * height_m)
-    return flow
+# ============================================================================
+# PUMP AND TURBINE CALCULATIONS
+# ============================================================================
 
-def power_from_water_flow(flow_m3s, height_m):
-    """How much electricity can we make? (kW)"""
-    power_w = WATER_DENSITY * GRAVITY * height_m * flow_m3s * TURBINE_EFFICIENCY
-    return power_w / 1000
+def calculate_pump_flow_rate(pump_power_kw: float, head_m: float) -> float:
+    """
+    Calculate water flow rate from pump power.
+    
+    Formula: Q = (P × η_pump) / (ρ × g × H)
+    
+    Where:
+        Q = Flow rate (m³/s)
+        P = Pump power (Watts)
+        η_pump = Pump efficiency (85%)
+        ρ = Water density (1000 kg/m³)
+        g = Gravity (9.81 m/s²)
+        H = Head (m)
+    
+    Args:
+        pump_power_kw: Pump power in kilowatts
+        head_m: Total head in meters
+    
+    Returns:
+        Flow rate in m³/s
+    """
+    if head_m <= 0:
+        return 0.0
+    
+    power_watts = pump_power_kw * 1000.0
+    flow_rate = (power_watts * PUMP_EFFICIENCY) / (WATER_DENSITY * GRAVITY * head_m)
+    
+    return max(0.0, flow_rate)
 
-def friction_loss(flow_m3s, pipe_m, length_m):
-    """How much energy is lost to friction?"""
-    if flow_m3s <= 0:
-        return 0
+def calculate_turbine_power(flow_rate_m3s: float, head_m: float) -> float:
+    """
+    Calculate electrical power from water flow.
     
-    area = math.pi * (pipe_m/2) ** 2
-    velocity = flow_m3s / area
+    Formula: P = ρ × g × H × Q × η_turbine
     
-    # Simplified friction factor
-    f = 0.02  # Rough estimate
+    Where:
+        P = Power (Watts)
+        ρ = Water density (1000 kg/m³)
+        g = Gravity (9.81 m/s²)
+        H = Head (m)
+        Q = Flow rate (m³/s)
+        η_turbine = Turbine efficiency (90%)
     
-    loss = f * (length_m/pipe_m) * (velocity**2) / (2 * GRAVITY)
-    return loss
+    Args:
+        flow_rate_m3s: Water flow in m³/s
+        head_m: Total head in meters
+    
+    Returns:
+        Power in kilowatts
+    """
+    if flow_rate_m3s <= 0 or head_m <= 0:
+        return 0.0
+    
+    power_watts = WATER_DENSITY * GRAVITY * head_m * flow_rate_m3s * TURBINE_EFFICIENCY
+    power_kw = power_watts / 1000.0
+    
+    return max(0.0, power_kw)
+
+def calculate_pump_power_from_flow(flow_rate_m3s: float, head_m: float) -> float:
+    """
+    Calculate pump power required for a given flow rate.
+    
+    Formula: P = (ρ × g × H × Q) / η_pump
+    
+    Args:
+        flow_rate_m3s: Flow rate in m³/s
+        head_m: Total head in meters
+    
+    Returns:
+        Power in kilowatts
+    """
+    if flow_rate_m3s <= 0 or head_m <= 0:
+        return 0.0
+    
+    power_watts = (WATER_DENSITY * GRAVITY * head_m * flow_rate_m3s) / PUMP_EFFICIENCY
+    power_kw = power_watts / 1000.0
+    
+    return max(0.0, power_kw)
+
+
+
