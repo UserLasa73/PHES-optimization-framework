@@ -17,3 +17,7 @@ PIPE_ROUGHNESS = 0.00015      # m (steel pipe roughness)
 
 # Loss parameters
 MONTHLY_EVAPORATION = 0.03    # 3% evaporation per month
+
+# Minimum water level (can't go below this)
+MIN_WATER_PERCENT = 0.10      # 10%
+MAX_WATER_PERCENT = 0.95      # 95% (leave some space)
