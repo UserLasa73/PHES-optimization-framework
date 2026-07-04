@@ -1,54 +1,64 @@
 """
 solar_data_loader.py
 Fetches solar and load data using user inputs.
+Uses pvlib with proper tilt/azimuth modeling.
 """
 
 import pvlib
 import pandas as pd
 import numpy as np
 from pvlib.location import Location
+from pvlib.pvsystem import PVSystem, FixedMount
+from pvlib.modelchain import ModelChain
 
 
 def fetch_solar_data(user):
-    """
-    Fetch hourly solar data using PVlib from UserInputs object.
+    """Fetch solar data with tilt/azimuth correction."""
     
-    Args:
-        user: UserInputs object containing latitude, longitude, pv_kwp, etc.
-    
-    Returns:
-        List of hourly solar power in kW (8760 hours)
-    """
-    # Get values from user object
     latitude = user.latitude
     longitude = user.longitude
     pv_kwp = user.pv_kwp
     tilt = user.tilt_angle
     azimuth = user.azimuth_angle
-    year = getattr(user, 'year', 2021)  # Default 2021 if not set
     
-    # Create location
     location = Location(latitude, longitude, tz='Asia/Colombo')
     
-    # Create time range (non-leap year = 8760 hours)
-    start = pd.Timestamp(f'{year}-01-01 00:00:00', tz=location.tz)
-    times = pd.date_range(start=start, periods=8760, freq='h')
+    # Create time range
+    times = pd.date_range('2021-01-01', periods=8760, freq='h', tz=location.tz)
     
     # Get solar position
     solar_position = location.get_solarposition(times)
     
-    # Get clearsky GHI
+    # Get GHI
     clearsky = location.get_clearsky(times)
-    ghi = clearsky['ghi']  # W/m²
+    ghi = clearsky['ghi']
     
-    # Simple PV model
-    solar_kw = (ghi / 1000) * pv_kwp * 0.85  # 85% derating
+    # Get DHI and DNI
+    dhi = clearsky['dhi']
+    dni = clearsky['dni']
     
-    # Only during daytime (elevation > 0)
-    solar_kw = solar_kw * (solar_position['elevation'] > 0)
+    # Calculate POA irradiance (this considers tilt and azimuth!)
+    from pvlib.irradiance import get_total_irradiance
+    poa_irradiance = get_total_irradiance(
+        surface_tilt=tilt,
+        surface_azimuth=azimuth,
+        solar_zenith=solar_position['apparent_zenith'],
+        solar_azimuth=solar_position['azimuth'],
+        dni=dni,
+        ghi=ghi,
+        dhi=dhi
+    )
+    
+    # POA irradiance in W/m²
+    poa = poa_irradiance['poa_global']
+    
+    # Convert to power: (POA / 1000) * PV capacity * derating
+    solar_kw = (poa / 1000) * pv_kwp * 0.85
+    
+    # Only positive values
+    solar_kw = solar_kw.clip(lower=0)
     
     return solar_kw.tolist()
-
 
 def fetch_load_data(user):
     """
@@ -61,7 +71,7 @@ def fetch_load_data(user):
         List of hourly load in kW (8760 hours)
     """
     daily_kwh = user.daily_energy_kwh
-    spike_factor = user.demand_spike_factor
+    spike_factor = getattr(user, 'demand_spike_factor', 1.0)
     csv_path = getattr(user, 'load_csv_path', None)
     
     if csv_path:
@@ -73,7 +83,7 @@ def fetch_load_data(user):
                 load = load[:8760]
             elif len(load) < 8760:
                 while len(load) < 8760:
-                    load.append(load[-1])  # Pad
+                    load.append(load[-1])  # Pad with last value
             if spike_factor > 1.0:
                 load = apply_spikes(load, spike_factor)
             return load
@@ -88,7 +98,7 @@ def generate_load_profile(user):
     hour_of_day = np.arange(hours) % 24
     
     daily_kwh = user.daily_energy_kwh
-    spike_factor = user.demand_spike_factor
+    spike_factor = getattr(user, 'demand_spike_factor', 1.0)
     
     base = daily_kwh / 24.0
     load = np.ones(hours) * base
@@ -117,3 +127,22 @@ def apply_spikes(load, spike_factor):
     spike_hours = np.random.choice(len(load), size=int(len(load)*0.01), replace=False)
     load[spike_hours] = load[spike_hours] * spike_factor
     return load.tolist()
+
+
+# ===== FOR TESTING =====
+if __name__ == "__main__":
+    # Test the solar data fetcher
+    from user_inputs import UserInputs
+    
+    user = UserInputs()
+    user.latitude = 8.9
+    user.longitude = 79.9
+    user.pv_kwp = 30.0
+    user.tilt_angle = 10.0
+    user.azimuth_angle = 0.0
+    
+    solar = fetch_solar_data(user)
+    print(f"Solar data length: {len(solar)} hours")
+    print(f"Total solar: {sum(solar):.0f} kWh/year")
+    print(f"First 10 values: {solar[:10]}")
+    print(f"Max solar: {max(solar):.2f} kW")

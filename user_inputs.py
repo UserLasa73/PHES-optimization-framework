@@ -4,7 +4,7 @@
 class UserInputs:
     def __init__(self):
         # Site
-        self.location = "Vavuniya"
+        self.location = ""
         self.latitude = 8.9
         self.longitude = 79.9
         
@@ -12,6 +12,7 @@ class UserInputs:
         self.pv_kwp = 30.0
         self.tilt_angle = 10.0
         self.azimuth_angle = 0.0
+        self.year = 2021 #shouldn't be a leap year!
         
         # Load
         self.daily_energy_kwh = 50.0

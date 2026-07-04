@@ -6,10 +6,10 @@ Quick test to verify simulator works with your code.
 import numpy as np
 from user_inputs import UserInputs
 from simulator import PumpedHydroSimulator
+from solar_data_loader import fetch_solar_data, fetch_load_data
 
-# ===== 1. CREATE USER INPUTS (from proposal) =====
+# ===== 1. CREATE USER INPUTS =====
 user = UserInputs()
-user.location = "Vavuniya"
 user.latitude = 8.9
 user.longitude = 79.9
 user.pv_kwp = 30.0
@@ -25,48 +25,53 @@ user.has_grid_backup = False
 
 # ===== 2. CREATE A DESIGN TO TEST =====
 design = {
-    'head_m': 20.0,
-    'volume_m3': 2000.0,
+    'head_m': 25.0,
+    'volume_m3': 5000.0,
     'pipe_diameter_m': 0.25,
     'pump_power_kw': 20.0,
     'turbine_power_kw': 15.0
 }
 
-# ===== 3. GENERATE TEST DATA =====
-hours = 8760
-hour_of_day = np.arange(hours) % 24
-
-# Solar (simplified)
-solar = np.zeros(hours)
-daytime = (hour_of_day >= 6) & (hour_of_day <= 18)
-solar[daytime] = np.sin(np.pi * (hour_of_day[daytime] - 6) / 12) * user.pv_kwp
-solar = solar * np.random.uniform(0.4, 1.0, hours)
-
-# Load (simplified)
-base_load = user.daily_energy_kwh / 24.0
-load = np.ones(hours) * base_load
-morning = (hour_of_day >= 6) & (hour_of_day <= 8)
-load[morning] = base_load * 1.8
-evening = (hour_of_day >= 18) & (hour_of_day <= 22)
-load[evening] = base_load * 2.2
-load = load * np.random.uniform(0.85, 1.15, hours)
-
+# ===== 3. FETCH DATA (FIXED) =====
 print("=" * 60)
-print("PUMPED HYDRO SIMULATOR TEST")
+print("FETCHING DATA")
 print("=" * 60)
-print(f"Total Solar: {sum(solar):.0f} kWh/year")
-print(f"Total Load: {sum(load):.0f} kWh/year")
+
+# ✅ FIXED: Pass user object, not individual values
+solar_data = fetch_solar_data(user)  # ← ONE argument
+
+# ✅ FIXED: Use fetch_load_data with user object
+load_data = fetch_load_data(user)    # ← ONE argument
+
+# ===== 4. VERIFY =====
+print(f"Solar length: {len(solar_data)} hours")
+print(f"Load length:  {len(load_data)} hours")
+
+# Trim if needed
+if len(solar_data) > 8760:
+    print(f"⚠️ Solar has {len(solar_data)} hours, trimming to 8760")
+    solar_data = solar_data[:8760]
+if len(load_data) > 8760:
+    print(f"⚠️ Load has {len(load_data)} hours, trimming to 8760")
+    load_data = load_data[:8760]
+
+assert len(solar_data) == 8760, f"Solar is {len(solar_data)}, expected 8760"
+assert len(load_data) == 8760, f"Load is {len(load_data)}, expected 8760"
+print("✅ Both solar and load data have 8760 hours!")
+
+print(f"\nTotal Solar: {sum(solar_data):.0f} kWh/year")
+print(f"Total Load:  {sum(load_data):.0f} kWh/year")
 print(f"PV Size: {user.pv_kwp} kWp")
 print(f"Head: {design['head_m']} m")
 print(f"Volume: {design['volume_m3']} m³")
 print(f"Reservoir Types: {user.upper_reservoir_type} / {user.lower_reservoir_type}")
 
-# ===== 4. RUN SIMULATION =====
+# ===== 5. RUN SIMULATION =====
 print("\n🔄 Running simulation...")
 sim = PumpedHydroSimulator(user, design)
-results = sim.simulate(solar, load)
+results = sim.simulate(solar_data, load_data)
 
-# ===== 5. DISPLAY RESULTS =====
+# ===== 6. DISPLAY RESULTS =====
 metrics = results['metrics']
 
 print("\n" + "=" * 60)
@@ -86,7 +91,7 @@ print(f"\nFinal Reservoir Levels:")
 print(f"  Upper: {(sim.upper_volume / sim.max_upper * 100):.1f}%")
 print(f"  Lower: {(sim.lower_volume / sim.max_lower * 100):.1f}%")
 
-# ===== 6. SHOW FIRST 24 HOURS =====
+# ===== 7. SHOW FIRST 24 HOURS =====
 print("\n" + "=" * 60)
 print("FIRST 24 HOURS")
 print("=" * 60)
