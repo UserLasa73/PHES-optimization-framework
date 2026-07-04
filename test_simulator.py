@@ -2,7 +2,7 @@
 test_simulator.py
 Quick test to verify simulator works with your code.
 """
-
+import matplotlib.pyplot as plt
 import numpy as np
 from user_inputs import UserInputs
 from simulator import PumpedHydroSimulator
@@ -12,10 +12,10 @@ from solar_data_loader import fetch_solar_data, fetch_load_data
 user = UserInputs()
 user.latitude = 8.9
 user.longitude = 79.9
-user.pv_kwp = 30.0
+user.pv_kwp = 10.0
 user.tilt_angle = 10.0
 user.azimuth_angle = 0.0
-user.daily_energy_kwh = 50.0
+user.daily_energy_kwh = 20.0
 user.upper_reservoir_type = "new_tank"
 user.lower_reservoir_type = "new_tank"
 user.autonomy_days = 2.0
@@ -25,11 +25,11 @@ user.has_grid_backup = False
 
 # ===== 2. CREATE A DESIGN TO TEST =====
 design = {
-    'head_m': 25.0,
-    'volume_m3': 5000.0,
-    'pipe_diameter_m': 0.25,
-    'pump_power_kw': 20.0,
-    'turbine_power_kw': 15.0
+    'head_m': 15.0,             # ← 15m (small hill)
+    'volume_m3': 100.0,         # ← 100 m³ (small tank)
+    'pipe_diameter_m': 0.15,    # ← 6 inch pipe
+    'pump_power_kw': 5.0,       # ← 5 kW pump
+    'turbine_power_kw': 3.0     # ← 3 kW turbine
 }
 
 # ===== 3. FETCH DATA (FIXED) =====
@@ -66,8 +66,17 @@ print(f"Head: {design['head_m']} m")
 print(f"Volume: {design['volume_m3']} m³")
 print(f"Reservoir Types: {user.upper_reservoir_type} / {user.lower_reservoir_type}")
 
+# Plot first 7 days (168 hours)
+plt.figure(figsize=(12, 5))
+plt.plot(solar_data[:168])
+plt.xlabel('Hour')
+plt.ylabel('Solar Power (kW)')
+plt.title(f'Solar Generation - First 7 Days ({user.location})')
+plt.grid(True)
+plt.show()
+
 # ===== 5. RUN SIMULATION =====
-print("\n🔄 Running simulation...")
+print("\n Running simulation...")
 sim = PumpedHydroSimulator(user, design)
 results = sim.simulate(solar_data, load_data)
 
