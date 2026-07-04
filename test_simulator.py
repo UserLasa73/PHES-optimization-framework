@@ -22,6 +22,7 @@ user.autonomy_days = 2.0
 user.evaporation_rate_mm_month = 50.0
 user.demand_spike_factor = 1.0
 user.has_grid_backup = False
+user.pipe_roughness_m = 0.00015  # Steel pipe
 
 # ===== 2. CREATE A DESIGN TO TEST =====
 design = {

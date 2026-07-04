@@ -71,30 +71,44 @@ class PumpedHydroSimulator:
         grid = 0.0
         state = 'idle'
         
-        # ===== PUMPING =====
+        # ===== PUMPING (CORRECTED - WITH POWER LIMIT) =====
         if net > 0:
             excess = net
             space_upper = self.max_upper - self.upper_volume
             water_lower = self.lower_volume - self.min_lower
             
             if space_upper > 0 and water_lower > 0:
-                # Max flow rate from pump
+                # Max flow pump CAN achieve (with full head)
                 max_flow = calculate_pump_flow_rate(self.pump_power, self.head)
                 max_pump_vol = max_flow * SECONDS_PER_HOUR
                 
-                pump_vol = min(max_pump_vol, space_upper, water_lower)
+                # Max flow we CAN AFFORD with available excess power
+                # Q = (P * efficiency) / (rho * g * H)
+                max_flow_with_power = (excess * 1000.0 * PUMP_EFFICIENCY) / (WATER_DENSITY * GRAVITY * self.head)
+                max_vol_with_power = max_flow_with_power * SECONDS_PER_HOUR
+                
+                # Actual pump volume = minimum of all limits
+                pump_vol = min(max_pump_vol, max_vol_with_power, space_upper, water_lower)
                 
                 if pump_vol > 0:
+                    flow = pump_vol / SECONDS_PER_HOUR
+                    
+                    # Head loss during pumping
+                    head_loss = calculate_total_head_loss(
+                        flow, self.pipe_diam, self.head, self.user.pipe_roughness_m
+                    )
+                    effective_head = max(0, self.head - head_loss)
+                    
+                    # ACTUAL power needed
+                    power_used = calculate_pump_power_from_flow(flow, effective_head)
+                    
                     # Move water UP
                     self.upper_volume += pump_vol
                     self.lower_volume -= pump_vol
                     
-                    # Energy used = power to pump this water
-                    flow = pump_vol / SECONDS_PER_HOUR
-                    power_used = calculate_pump_power_from_flow(flow, self.head)
-                    
-                    pumped = power_used  # Energy used for pumping
-                    curtailed = max(0, excess - power_used)  # Can't use more than excess
+                    # Record energy
+                    pumped = power_used  # ← ALWAYS power_used
+                    curtailed = max(0, excess - power_used)  # Remaining solar wasted
                     state = 'pumping'
                 else:
                     curtailed = excess
@@ -201,6 +215,8 @@ class PumpedHydroSimulator:
             'grid_used': grid, 'state': state
         }
     
+    
+
     def simulate(self, solar_data, load_data):
         """Run full simulation"""
         self._reset()
