@@ -6,6 +6,7 @@ Pumped Hydro Energy Storage Simulator
 import numpy as np
 from constants import *
 from physics import *
+from cost_model import calculate_capital_cost
 
 
 class PumpedHydroSimulator:
@@ -249,19 +250,17 @@ class PumpedHydroSimulator:
         }
     
     def _calculate_cost(self):
-        """Calculate capital cost"""
-        upper_factor = get_reservoir_cost_factor(self.user.upper_reservoir_type)
-        lower_factor = get_reservoir_cost_factor(self.user.lower_reservoir_type)
-        
-        reservoir_cost = (self.volume * 1500.0 * upper_factor) + \
-                        (self.volume * 1500.0 * lower_factor)
-        
-        pump_cost = self.pump_power * 1200.0
-        turbine_cost = self.turbine_power * 1200.0
-        pipe_cost = self.head * 3.0 * 2.0 * 800.0
-        pv_cost = self.user.pv_kwp * 120000.0
-        
-        equipment = reservoir_cost + pump_cost + turbine_cost + pipe_cost + pv_cost
-        total = equipment * 1.35
-        
-        return total
+        cost = calculate_capital_cost(
+            self.volume,
+            self.head,
+            self.pipe_diam,
+            self.pump_power,
+            self.turbine_power,
+            self.user.pv_kwp,
+            self.user.upper_reservoir_type,
+            self.user.lower_reservoir_type
+        )
+        # If it's a dict, extract total
+        if isinstance(cost, dict):
+            return cost['total_lkr']
+        return cost
