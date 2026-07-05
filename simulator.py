@@ -1,8 +1,3 @@
-"""
-simulator.py - FIXED VERSION
-Pumped Hydro Energy Storage Simulator
-"""
-
 import numpy as np
 from constants import *
 from physics import *
