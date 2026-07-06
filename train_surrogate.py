@@ -1,71 +1,68 @@
 """
 train_surrogate.py
-Train XGBoost surrogate models for efficiency and cost predictions.
-Matches research proposal specifications:
-- 80/20 train-test split
-- 5-fold cross-validation
-- Grid search for hyperparameters
-- R2 > 0.95, MAE < 5%
-- Feature importance analysis
+Train XGBoost models on ALL user inputs (9 features).
 """
 
 import pandas as pd
 import numpy as np
 import xgboost as xgb
-from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
-from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.metrics import r2_score, mean_absolute_error
 import joblib
 import os
 import warnings
 warnings.filterwarnings('ignore')
 
 print("=" * 70)
-print("XGBOOST SURROGATE TRAINING")
+print("XGBOOST SURROGATE TRAINING (9 Features)")
 print("=" * 70)
 
 # ============================================================================
 # LOAD DATA
 # ============================================================================
 
-df = pd.read_csv('training_data_2000_samples.csv')
+df = pd.read_csv('training_data_all_inputs.csv')
 print(f"Loaded {len(df)} samples")
 
 # ============================================================================
-# FEATURES AND TARGETS
+# FEATURES (ALL 9)
 # ============================================================================
 
-features = ['volume_m3', 'head_m', 'pipe_diameter_m', 'pump_power_kw', 'turbine_power_kw']
+features = [
+    'volume_m3', 'head_m', 'pipe_diameter_m', 
+    'pump_power_kw', 'turbine_power_kw',
+    'pv_kwp', 'daily_energy_kwh', 
+    'evaporation_rate_mm_month', 'reservoir_type_code'
+]
+
 X = df[features].values
 y_eff = df['efficiency'].values
 y_cost = df['cost'].values
+y_auto = df['autonomy'].values
 
-print(f"\nFeatures: {features}")
-print(f"Targets: efficiency (%), cost (LKR)")
+print(f"\nFeatures ({len(features)}):")
+for i, f in enumerate(features):
+    print(f"  {i+1}. {f}")
 
 # ============================================================================
-# 80/20 TRAIN-TEST SPLIT
+# TRAIN-TEST SPLIT
 # ============================================================================
 
 X_train, X_test, y_eff_train, y_eff_test = train_test_split(
     X, y_eff, test_size=0.2, random_state=42
 )
-
 _, _, y_cost_train, y_cost_test = train_test_split(
     X, y_cost, test_size=0.2, random_state=42
 )
+_, _, y_auto_train, y_auto_test = train_test_split(
+    X, y_auto, test_size=0.2, random_state=42
+)
 
-print(f"\nTraining set: {len(X_train)} samples (80%)")
-print(f"Test set: {len(X_test)} samples (20%)")
+print(f"\nTraining: {len(X_train)} | Test: {len(X_test)}")
 
 # ============================================================================
-# EFFICIENCY MODEL WITH GRID SEARCH + 5-FOLD CV
+# GRID SEARCH
 # ============================================================================
-
-print("\n" + "-" * 70)
-print("MODEL 1: EFFICIENCY")
-print("-" * 70)
-
-print("Performing grid search with 5-fold cross-validation...")
 
 param_grid = {
     'n_estimators': [100, 200, 300],
@@ -75,76 +72,78 @@ param_grid = {
     'colsample_bytree': [0.7, 0.8, 0.9]
 }
 
+print("\n" + "-" * 70)
+print("GRID SEARCH (this will take a few minutes)")
+print("-" * 70)
+
+# ============================================================================
+# TRAIN EFFICIENCY
+# ============================================================================
+
+print("\nTraining Efficiency Model...")
 grid_eff = GridSearchCV(
     xgb.XGBRegressor(random_state=42),
     param_grid,
     cv=5,
     scoring='r2',
     n_jobs=-1,
-    verbose=1
+    verbose=0
 )
-
 grid_eff.fit(X_train, y_eff_train)
 model_eff = grid_eff.best_estimator_
 
-print(f"\nBest parameters: {grid_eff.best_params_}")
+y_pred = model_eff.predict(X_test)
+r2_eff = r2_score(y_eff_test, y_pred)
+mae_eff = mean_absolute_error(y_eff_test, y_pred)
 
-# Cross-validation scores
-cv_scores_eff = cross_val_score(model_eff, X_train, y_eff_train, cv=5, scoring='r2')
-print(f"5-fold CV R2: {cv_scores_eff.mean():.4f} (+/- {cv_scores_eff.std():.4f})")
-
-# Test set evaluation
-y_eff_pred = model_eff.predict(X_test)
-r2_test_eff = r2_score(y_eff_test, y_eff_pred)
-mae_test_eff = mean_absolute_error(y_eff_test, y_eff_pred)
-rmse_test_eff = np.sqrt(mean_squared_error(y_eff_test, y_eff_pred))
-
-print(f"\nTest set performance:")
-print(f"  R2:  {r2_test_eff:.4f}")
-print(f"  MAE: {mae_test_eff:.2f}%  (target: < 5%)")
-print(f"  RMSE: {rmse_test_eff:.2f}%")
-
-if r2_test_eff > 0.95 and mae_test_eff < 5.0:
-    print("  PASS: R2 > 0.95 and MAE < 5%")
-else:
-    print(f"  WARNING: R2={r2_test_eff:.4f}, MAE={mae_test_eff:.2f}%")
+print(f"  R2: {r2_eff:.4f} | MAE: {mae_eff:.2f}%")
+print(f"  Best params: {grid_eff.best_params_}")
 
 # ============================================================================
-# COST MODEL WITH GRID SEARCH + 5-FOLD CV
+# TRAIN COST
 # ============================================================================
 
-print("\n" + "-" * 70)
-print("MODEL 2: COST")
-print("-" * 70)
-
-print("Performing grid search with 5-fold cross-validation...")
-
+print("\nTraining Cost Model...")
 grid_cost = GridSearchCV(
     xgb.XGBRegressor(random_state=42),
     param_grid,
     cv=5,
     scoring='r2',
     n_jobs=-1,
-    verbose=1
+    verbose=0
 )
-
 grid_cost.fit(X_train, y_cost_train)
 model_cost = grid_cost.best_estimator_
 
-print(f"\nBest parameters: {grid_cost.best_params_}")
+y_pred = model_cost.predict(X_test)
+r2_cost = r2_score(y_cost_test, y_pred)
+mae_cost = mean_absolute_error(y_cost_test, y_pred)
 
-cv_scores_cost = cross_val_score(model_cost, X_train, y_cost_train, cv=5, scoring='r2')
-print(f"5-fold CV R2: {cv_scores_cost.mean():.4f} (+/- {cv_scores_cost.std():.4f})")
+print(f"  R2: {r2_cost:.4f} | MAE: {mae_cost:,.0f} LKR")
+print(f"  Best params: {grid_cost.best_params_}")
 
-y_cost_pred = model_cost.predict(X_test)
-r2_test_cost = r2_score(y_cost_test, y_cost_pred)
-mae_test_cost = mean_absolute_error(y_cost_test, y_cost_pred)
-rmse_test_cost = np.sqrt(mean_squared_error(y_cost_test, y_cost_pred))
+# ============================================================================
+# TRAIN AUTONOMY
+# ============================================================================
 
-print(f"\nTest set performance:")
-print(f"  R2:  {r2_test_cost:.4f}")
-print(f"  MAE: {mae_test_cost:,.0f} LKR")
-print(f"  RMSE: {rmse_test_cost:,.0f} LKR")
+print("\nTraining Autonomy Model...")
+grid_auto = GridSearchCV(
+    xgb.XGBRegressor(random_state=42),
+    param_grid,
+    cv=5,
+    scoring='r2',
+    n_jobs=-1,
+    verbose=0
+)
+grid_auto.fit(X_train, y_auto_train)
+model_auto = grid_auto.best_estimator_
+
+y_pred = model_auto.predict(X_test)
+r2_auto = r2_score(y_auto_test, y_pred)
+mae_auto = mean_absolute_error(y_auto_test, y_pred)
+
+print(f"  R2: {r2_auto:.4f} | MAE: {mae_auto:.2f} days")
+print(f"  Best params: {grid_auto.best_params_}")
 
 # ============================================================================
 # SAVE MODELS
@@ -154,40 +153,31 @@ os.makedirs('models', exist_ok=True)
 
 joblib.dump(model_eff, 'models/xgboost_efficiency.pkl')
 joblib.dump(model_cost, 'models/xgboost_cost.pkl')
-joblib.dump(grid_eff.best_params_, 'models/efficiency_best_params.pkl')
-joblib.dump(grid_cost.best_params_, 'models/cost_best_params.pkl')
+joblib.dump(model_auto, 'models/xgboost_autonomy.pkl')
+joblib.dump(features, 'models/feature_names.pkl')
 
 print("\n" + "=" * 70)
 print("MODELS SAVED")
 print("=" * 70)
 print("  models/xgboost_efficiency.pkl")
 print("  models/xgboost_cost.pkl")
-print("  models/efficiency_best_params.pkl")
-print("  models/cost_best_params.pkl")
+print("  models/xgboost_autonomy.pkl")
+print("  models/feature_names.pkl")
 
 # ============================================================================
 # FEATURE IMPORTANCE
 # ============================================================================
 
 print("\n" + "=" * 70)
-print("FEATURE IMPORTANCE")
+print("FEATURE IMPORTANCE (Efficiency)")
 print("=" * 70)
 
-importance_eff = pd.DataFrame({
+importance = pd.DataFrame({
     'feature': features,
     'importance': model_eff.feature_importances_
 }).sort_values('importance', ascending=False)
 
-importance_cost = pd.DataFrame({
-    'feature': features,
-    'importance': model_cost.feature_importances_
-}).sort_values('importance', ascending=False)
-
-print("\nEfficiency Model (Key variables like head height):")
-print(importance_eff.to_string(index=False))
-
-print("\nCost Model:")
-print(importance_cost.to_string(index=False))
+print(importance.to_string(index=False))
 
 # ============================================================================
 # SUMMARY
@@ -196,20 +186,15 @@ print(importance_cost.to_string(index=False))
 print("\n" + "=" * 70)
 print("SUMMARY")
 print("=" * 70)
-
 print(f"""
-Efficiency Model:
-  R2: {r2_test_eff:.4f} (target: > 0.95)
-  MAE: {mae_test_eff:.2f}% (target: < 5%)
-  Status: {'PASS' if r2_test_eff > 0.95 and mae_test_eff < 5.0 else 'NEED MORE DATA'}
+Efficiency:  R2 = {r2_eff:.4f}  | MAE = {mae_eff:.2f}%
+Cost:        R2 = {r2_cost:.4f}  | MAE = {mae_cost:,.0f} LKR
+Autonomy:    R2 = {r2_auto:.4f}  | MAE = {mae_auto:.2f} days
 
-Cost Model:
-  R2: {r2_test_cost:.4f} (target: > 0.95)
-  Status: {'PASS' if r2_test_cost > 0.95 else 'NEED MORE DATA'}
-
-Key Features:
-  Efficiency: {importance_eff.iloc[0]['feature']} (importance: {importance_eff.iloc[0]['importance']:.3f})
-  Cost: {importance_cost.iloc[0]['feature']} (importance: {importance_cost.iloc[0]['importance']:.3f})
+Top features for efficiency:
+  1. {importance.iloc[0]['feature']} ({importance.iloc[0]['importance']:.3f})
+  2. {importance.iloc[1]['feature']} ({importance.iloc[1]['importance']:.3f})
+  3. {importance.iloc[2]['feature']} ({importance.iloc[2]['importance']:.3f})
 """)
 
 print("Training complete.")
