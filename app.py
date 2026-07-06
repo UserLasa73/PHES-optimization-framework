@@ -1,1 +1,97 @@
-# The Streamlit web interface
+"""
+app.py
+Streamlit web interface for PHES optimization.
+"""
+
+import streamlit as st
+import pandas as pd
+import numpy as np
+import joblib
+import plotly.express as px
+
+from user_inputs import UserInputs
+from optimization import run_optimization, extract_pareto_front
+from cost_model import calculate_capital_cost
+
+st.set_page_config(page_title="PHES Optimizer", layout="wide")
+
+st.title("⚡ Solar-Pumped Hydro Energy Storage Optimizer")
+st.markdown("Design your own small-scale PHES system in seconds.")
+
+# ============================================================================
+# SIDEBAR - USER INPUTS
+# ============================================================================
+
+st.sidebar.header("📍 Site Parameters")
+
+latitude = st.sidebar.number_input("Latitude", value=8.9, format="%.2f")
+longitude = st.sidebar.number_input("Longitude", value=79.9, format="%.2f")
+pv_kwp = st.sidebar.number_input("PV Capacity (kWp)", value=30.0, min_value=5.0, max_value=100.0)
+daily_load = st.sidebar.number_input("Daily Load (kWh/day)", value=50.0, min_value=10.0, max_value=200.0)
+autonomy_days = st.sidebar.number_input("Autonomy (days)", value=2.0, min_value=1.0, max_value=5.0)
+reservoir_type = st.sidebar.selectbox("Reservoir Type", ["new_tank", "excavated", "pond", "river"])
+
+st.sidebar.header("🔧 Advanced")
+evap_rate = st.sidebar.number_input("Evaporation Rate (mm/month)", value=50.0)
+
+# ============================================================================
+# RUN OPTIMIZATION
+# ============================================================================
+
+if st.sidebar.button(" Optimize Design", type="primary"):
+    
+    with st.spinner("Running optimization... This may take a minute."):
+        
+        # Create user inputs
+        user = UserInputs()
+        user.latitude = latitude
+        user.longitude = longitude
+        user.pv_kwp = pv_kwp
+        user.daily_energy_kwh = daily_load
+        user.autonomy_days = autonomy_days
+        user.upper_reservoir_type = reservoir_type
+        user.lower_reservoir_type = reservoir_type
+        user.evaporation_rate_mm_month = evap_rate
+        
+        # Run optimization (simplified)
+        population = run_optimization()
+        pareto_front = extract_pareto_front(population)
+        
+        if pareto_front:
+            df = pd.DataFrame(pareto_front)
+            
+            # Display results
+            st.success(f" Found {len(df)} optimal designs!")
+            
+            # Table
+            st.subheader(" Optimal Designs (Pareto Front)")
+            st.dataframe(df.style.format({
+                'volume_m3': '{:.0f}',
+                'head_m': '{:.1f}',
+                'pipe_diameter_m': '{:.2f}',
+                'pump_power_kw': '{:.1f}',
+                'turbine_power_kw': '{:.1f}',
+                'efficiency': '{:.1f}%',
+                'cost': 'LKR {:.0f}'
+            }))
+            
+            # Best design
+            best = df.iloc[0]
+            st.subheader(" Best Design")
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Efficiency", f"{best['efficiency']:.1f}%")
+            col2.metric("Cost", f"LKR {best['cost']:,.0f}")
+            col3.metric("Volume", f"{best['volume_m3']:.0f} m³")
+            
+            # Pareto front plot
+            fig = px.scatter(df, x='cost', y='efficiency', 
+                             title='Pareto Front: Efficiency vs Cost',
+                             labels={'cost': 'Cost (LKR)', 'efficiency': 'Efficiency (%)'})
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Download
+            csv = df.to_csv(index=False)
+            st.download_button("📥 Download Results (CSV)", csv, "phos_designs.csv")
+            
+        else:
+            st.error(" No valid designs found. Try relaxing constraints or increasing bounds.")
