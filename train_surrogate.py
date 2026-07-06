@@ -100,29 +100,6 @@ print(f"  R2: {r2_eff:.4f} | MAE: {mae_eff:.2f}%")
 print(f"  Best params: {grid_eff.best_params_}")
 
 # ============================================================================
-# TRAIN COST
-# ============================================================================
-
-print("\nTraining Cost Model...")
-grid_cost = GridSearchCV(
-    xgb.XGBRegressor(random_state=42),
-    param_grid,
-    cv=5,
-    scoring='r2',
-    n_jobs=-1,
-    verbose=0
-)
-grid_cost.fit(X_train, y_cost_train)
-model_cost = grid_cost.best_estimator_
-
-y_pred = model_cost.predict(X_test)
-r2_cost = r2_score(y_cost_test, y_pred)
-mae_cost = mean_absolute_error(y_cost_test, y_pred)
-
-print(f"  R2: {r2_cost:.4f} | MAE: {mae_cost:,.0f} LKR")
-print(f"  Best params: {grid_cost.best_params_}")
-
-# ============================================================================
 # TRAIN AUTONOMY
 # ============================================================================
 
@@ -152,7 +129,6 @@ print(f"  Best params: {grid_auto.best_params_}")
 os.makedirs('models', exist_ok=True)
 
 joblib.dump(model_eff, 'models/xgboost_efficiency.pkl')
-joblib.dump(model_cost, 'models/xgboost_cost.pkl')
 joblib.dump(model_auto, 'models/xgboost_autonomy.pkl')
 joblib.dump(features, 'models/feature_names.pkl')
 
@@ -188,7 +164,6 @@ print("SUMMARY")
 print("=" * 70)
 print(f"""
 Efficiency:  R2 = {r2_eff:.4f}  | MAE = {mae_eff:.2f}%
-Cost:        R2 = {r2_cost:.4f}  | MAE = {mae_cost:,.0f} LKR
 Autonomy:    R2 = {r2_auto:.4f}  | MAE = {mae_auto:.2f} days
 
 Top features for efficiency:
