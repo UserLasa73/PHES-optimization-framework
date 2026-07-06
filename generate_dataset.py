@@ -1,6 +1,6 @@
 """
 generate_dataset.py
-Generate training data for MULTIPLE Sri Lankan locations.
+Generate training data for MULTIPLE Sri Lankan locations with ALL user inputs.
 """
 
 import numpy as np
@@ -31,34 +31,46 @@ LOCATIONS = [
     {'name': 'Anuradhapura', 'lat': 8.3, 'lon': 80.4},
 ]
 
-SAMPLES_PER_LOCATION = 300  # 300 × 8 = 2400 samples
-TOTAL_SAMPLES = SAMPLES_PER_LOCATION * len(LOCATIONS)
+SAMPLES_PER_LOCATION = 250  # 250 × 8 = 2000 samples
 
-# Fixed user inputs (except location)
-USER = UserInputs()
-USER.year = 2025
-USER.pv_kwp = 30.0
-USER.tilt_angle = 10.0
-USER.azimuth_angle = 0.0
-USER.daily_energy_kwh = 50.0
-USER.upper_reservoir_type = "new_tank"
-USER.lower_reservoir_type = "new_tank"
-USER.autonomy_days = 2.0
-USER.evaporation_rate_mm_month = 50.0
-USER.demand_spike_factor = 1.0
-USER.has_grid_backup = False
-USER.pipe_roughness_m = 0.00015
+# Reservoir type mapping
+RES_TYPE_MAP = {
+    0: 'new_tank',
+    1: 'excavated',
+    2: 'pond',
+    3: 'river'
+}
+
+# Base fixed user parameters (location will change per location)
+BASE_USER = UserInputs()
+BASE_USER.year = 2025
+BASE_USER.tilt_angle = 10.0
+BASE_USER.azimuth_angle = 0.0
+BASE_USER.autonomy_days = 2.0
+BASE_USER.demand_spike_factor = 1.0
+BASE_USER.has_grid_backup = False
+BASE_USER.pipe_roughness_m = 0.00015
+BASE_USER.upper_reservoir_type = "new_tank"
+BASE_USER.lower_reservoir_type = "new_tank"
+
 
 # ============================================================================
-# PARAMETER BOUNDS
+# PARAMETER BOUNDS (ALL inputs + design variables)
 # ============================================================================
 
 BOUNDS = {
+    # Design variables (what we optimize)
     'volume_m3': (50, 500),
     'head_m': (10, 30),
     'pipe_diameter_m': (0.1, 0.3),
     'pump_power_kw': (3, 15),
-    'turbine_power_kw': (2, 10)
+    'turbine_power_kw': (2, 10),
+    
+    # User inputs (fixed but vary in dataset)
+    'pv_kwp': (10, 50),
+    'daily_energy_kwh': (20, 100),
+    'evaporation_rate_mm_month': (30, 80),
+    'reservoir_type_code': (0, 3)  # 0=new_tank, 1=excavated, 2=pond, 3=river
 }
 
 VARIABLE_NAMES = list(BOUNDS.keys())
@@ -77,26 +89,38 @@ def generate_lhs_samples(n_samples, n_vars, bounds):
     
     scaled = np.zeros_like(samples)
     for i, (low, high) in enumerate(bounds):
-        scaled[:, i] = low + samples[:, i] * (high - low)
+        if i == 8:  # reservoir_type_code (integer)
+            scaled[:, i] = np.floor(low + samples[:, i] * (high - low + 1))
+            scaled[:, i] = np.clip(scaled[:, i], low, high)
+        else:
+            scaled[:, i] = low + samples[:, i] * (high - low)
     
     return scaled
 
 
 def run_single_simulation(user, design, solar_data, load_data):
-    """Run one simulation and return metrics."""
+    """Run one simulation and return metrics with ALL inputs."""
     sim = PumpedHydroSimulator(user, design)
     result = sim.simulate(solar_data, load_data)
     metrics = result['metrics']
     
     return {
+        # INPUTS (features)
         'volume_m3': design['volume_m3'],
         'head_m': design['head_m'],
         'pipe_diameter_m': design['pipe_diameter_m'],
         'pump_power_kw': design['pump_power_kw'],
         'turbine_power_kw': design['turbine_power_kw'],
+        'pv_kwp': user.pv_kwp,
+        'daily_energy_kwh': user.daily_energy_kwh,
+        'evaporation_rate_mm_month': user.evaporation_rate_mm_month,
+        'reservoir_type_code': user.reservoir_type_code,
+        'reservoir_type': user.upper_reservoir_type,
+        'location': user.location,
         'latitude': user.latitude,
         'longitude': user.longitude,
-        'location': user.location,
+        
+        # OUTPUTS (targets)
         'efficiency': metrics['efficiency_percent'],
         'cost': metrics['capital_cost_lkr'],
         'autonomy': metrics['autonomy_days'],
@@ -113,14 +137,15 @@ def run_single_simulation(user, design, solar_data, load_data):
 # ============================================================================
 
 def generate_dataset():
-    """Generate dataset for all locations."""
+    """Generate dataset for all locations with all inputs."""
     
     print("=" * 70)
-    print("MULTI-LOCATION DATASET GENERATION")
+    print("MULTI-LOCATION DATASET GENERATION (All Inputs)")
     print("=" * 70)
     print(f"Locations: {len(LOCATIONS)}")
     print(f"Samples per location: {SAMPLES_PER_LOCATION}")
-    print(f"Total samples: {TOTAL_SAMPLES}")
+    print(f"Total samples: {len(LOCATIONS) * SAMPLES_PER_LOCATION}")
+    print(f"Variables: {VARIABLE_NAMES}")
     print("=" * 70)
     
     # Generate LHS designs (same for all locations)
@@ -134,15 +159,23 @@ def generate_dataset():
         print(f" Location: {loc['name']} ({loc['lat']}°N, {loc['lon']}°E)")
         print("-" * 70)
         
-        # Update user with this location
-        USER.location = loc['name']
-        USER.latitude = loc['lat']
-        USER.longitude = loc['lon']
+        # Create user for this location (base + location)
+        user = UserInputs()
+        user.year = BASE_USER.year
+        user.tilt_angle = BASE_USER.tilt_angle
+        user.azimuth_angle = BASE_USER.azimuth_angle
+        user.autonomy_days = BASE_USER.autonomy_days
+        user.demand_spike_factor = BASE_USER.demand_spike_factor
+        user.has_grid_backup = BASE_USER.has_grid_backup
+        user.pipe_roughness_m = BASE_USER.pipe_roughness_m
+        user.location = loc['name']
+        user.latitude = loc['lat']
+        user.longitude = loc['lon']
         
         # Fetch solar data for this location
         print(f"   Fetching solar data...")
-        solar_data = fetch_solar_data(USER)
-        load_data = fetch_load_data(USER)
+        solar_data = fetch_solar_data(user)
+        load_data = fetch_load_data(user)
         
         print(f"   Solar: {sum(solar_data):.0f} kWh/year")
         print(f"   Running {SAMPLES_PER_LOCATION} simulations...")
@@ -150,13 +183,27 @@ def generate_dataset():
         start_time = time.time()
         
         for i in range(SAMPLES_PER_LOCATION):
-            # Create design
-            design = {}
-            for j, name in enumerate(VARIABLE_NAMES):
-                design[name] = lhs_samples[i, j]
+            # Create design (design variables only)
+            design = {
+                'volume_m3': lhs_samples[i, 0],
+                'head_m': lhs_samples[i, 1],
+                'pipe_diameter_m': lhs_samples[i, 2],
+                'pump_power_kw': lhs_samples[i, 3],
+                'turbine_power_kw': lhs_samples[i, 4]
+            }
+            
+            # Set user inputs (varied across samples)
+            user.pv_kwp = lhs_samples[i, 5]
+            user.daily_energy_kwh = lhs_samples[i, 6]
+            user.evaporation_rate_mm_month = lhs_samples[i, 7]
+            res_code = int(lhs_samples[i, 8])
+            res_type = RES_TYPE_MAP[res_code]
+            user.upper_reservoir_type = res_type
+            user.lower_reservoir_type = res_type
+            user.reservoir_type_code = res_code
             
             # Run simulation
-            result = run_single_simulation(USER, design, solar_data, load_data)
+            result = run_single_simulation(user, design, solar_data, load_data)
             all_results.append(result)
             
             # Progress
@@ -185,9 +232,16 @@ def generate_dataset():
         'autonomy': ['mean']
     }).round(2))
     
+    # Summary by reservoir type
+    print("\nSummary by reservoir type:")
+    print(df.groupby('reservoir_type').agg({
+        'efficiency': ['mean', 'min', 'max'],
+        'cost': ['mean', 'min', 'max']
+    }).round(2))
+    
     # Save
-    df.to_csv('training_data_multi_location.csv', index=False)
-    print(f"\n Saved to: training_data_multi_location.csv")
+    df.to_csv('training_data_all_inputs.csv', index=False)
+    print(f"\n Saved to: training_data_all_inputs.csv")
     
     return df
 
@@ -200,3 +254,4 @@ if __name__ == "__main__":
     df = generate_dataset()
     print("\nFirst 5 rows:")
     print(df.head().to_string())
+    print("\nFeature columns:", [c for c in df.columns if c not in ['efficiency', 'cost', 'autonomy', 'autonomy_met', 'pumped', 'generated', 'unmet', 'curtailed']])
