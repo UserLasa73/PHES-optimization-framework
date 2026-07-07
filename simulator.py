@@ -230,10 +230,16 @@ class PumpedHydroSimulator:
         )
         
         # Autonomy
-        # Autonomy (FIXED: use total volume, not final water level)
-        total_stored_energy = calculate_stored_energy(self.volume, self.head)  # ← TOTAL volume
+        # Use the maximum water stored in upper reservoir
+        if self.history['upper_volume']:
+            max_upper_volume = max(self.history['upper_volume'])
+        else:
+            max_upper_volume = self.upper_volume
+        
+        total_stored_energy = calculate_stored_energy(max_upper_volume, self.head)
         avg_daily_load = total_load / 365.0 if total_load > 0 else 1.0
         autonomy = total_stored_energy / avg_daily_load
+        autonomy_met = autonomy >= self.user.autonomy_days
         
         # Cost
         cost = self._calculate_cost()
