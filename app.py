@@ -38,7 +38,7 @@ evap_rate = st.sidebar.number_input("Evaporation Rate (mm/month)", value=50.0)
 # Display Prices
 # ============================================================================
 def display_shopping_list(design, user):
-    """Display shopping list using the cost model."""
+    """Display shopping list using the cost model (single source of truth)."""
     
     st.subheader("Shopping List / Bill of Materials")
     
@@ -49,7 +49,7 @@ def display_shopping_list(design, user):
         design['pipe_diameter_m'],
         design['pump_power_kw'],
         design['turbine_power_kw'],
-        user.pv_kwp,  # Not used for cost, but needed for function signature
+        user.pv_kwp,
         user.upper_reservoir_type,
         user.lower_reservoir_type
     )
@@ -63,6 +63,7 @@ def display_shopping_list(design, user):
         st.markdown("**1. Two Reservoirs**")
         st.caption(f"Upper: {cost_dict['upper_volume_m3']:.0f} m³")
         st.caption(f"Lower: {cost_dict['lower_volume_m3']:.0f} m³")
+        st.caption(f"Total: {cost_dict['total_volume_m3']:.0f} m³")
         st.caption(f"Type: {user.upper_reservoir_type} / {user.lower_reservoir_type}")
     with col2:
         st.markdown(" ")
@@ -103,6 +104,7 @@ def display_shopping_list(design, user):
     with col1:
         st.markdown("**4. Penstock Pipes**")
         st.caption(f"Diameter: {design['pipe_diameter_m']:.2f} m")
+        st.caption(f"Length: {design['head_m'] * 2.5:.0f} m (supply + return)")
     with col2:
         st.markdown(" ")
         st.caption("Cost:")
@@ -115,7 +117,7 @@ def display_shopping_list(design, user):
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         st.markdown("**5. Control System**")
-        st.caption("Controllers, sensors, wiring")
+        st.caption("Controllers, sensors, wiring, switches")
     with col2:
         st.markdown(" ")
         st.caption("Cost:")
@@ -128,7 +130,7 @@ def display_shopping_list(design, user):
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         st.markdown("**6. Installation & Civil**")
-        st.caption("Excavation, foundations, labor")
+        st.caption("Excavation, foundations, labor, transport")
     with col2:
         st.markdown(" ")
         st.caption("Cost:")
@@ -140,16 +142,16 @@ def display_shopping_list(design, user):
     
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
-        st.markdown("### TOTAL")
-        st.caption("(PV panels EXCLUDED)")
-        st.caption(f"≈ USD {total/300:,.0f}")
+        st.markdown("### TOTAL ESTIMATED COST")
+        st.caption("(PV panels EXCLUDED - user already has them)")
+        st.caption(f"≈ USD {total/300:,.0f} (at 1 USD = 300 LKR)")
     with col2:
         st.markdown(" ")
     with col3:
         st.markdown(" ")
         st.markdown(f"### **LKR {total:,.0f}**")
     
-    st.caption(" *Estimated costs for design comparison.*")
+    st.caption("*These are estimated costs for design comparison. Actual prices may vary by supplier, location, and market conditions. Get local quotes for accurate pricing.*")
 
 # ============================================================================
 # RUN OPTIMIZATION
