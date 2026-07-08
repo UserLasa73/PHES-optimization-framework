@@ -59,11 +59,11 @@ BASE_USER.lower_reservoir_type = "new_tank"
 # ============================================================================
 
 BOUNDS = {
-    'volume_m3': (50, 2000),        # Small to large
-    'head_m': (5, 50),              # Very low to very high
-    'pipe_diameter_m': (0.05, 0.5), # Tiny to huge
-    'pump_power_kw': (2, 50),       # Small to large pump
-    'turbine_power_kw': (2, 40),    # Small to large turbine
+    'volume_m3': (20, 1000),           # Small home to large island
+    'head_m': (5, 40),                # Small hill to moderate hill
+    'pipe_diameter_m': (0.05, 0.4),   # Small to medium pipe
+    'pump_power_kw': (2, 40),         # Small to medium pump
+    'turbine_power_kw': (1, 30),      # Small to medium turbine
     'pv_kwp': (5, 50),
     'daily_energy_kwh': (10, 100),
     'evaporation_rate_mm_month': (30, 80),
@@ -80,13 +80,18 @@ N_VARIABLES = len(VARIABLE_NAMES)
 # ============================================================================
 
 def generate_lhs_samples(n_samples, n_vars, bounds):
-    """Generate Latin Hypercube samples using scipy."""
+    """Generate LHS samples with log scaling for volume."""
     sampler = qmc.LatinHypercube(d=n_vars)
     samples = sampler.random(n=n_samples)
     
     scaled = np.zeros_like(samples)
     for i, (low, high) in enumerate(bounds):
-        if i == 8:  # reservoir_type_code (integer)
+        if i == 0:  # Volume: log scaling
+            log_low = np.log10(max(low, 1))
+            log_high = np.log10(high)
+            log_values = log_low + samples[:, i] * (log_high - log_low)
+            scaled[:, i] = 10 ** log_values
+        elif i == 8:  # reservoir_type_code (integer)
             scaled[:, i] = np.floor(low + samples[:, i] * (high - low + 1))
             scaled[:, i] = np.clip(scaled[:, i], low, high)
         else:
