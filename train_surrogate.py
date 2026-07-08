@@ -136,7 +136,6 @@ print("\n" + "=" * 70)
 print("MODELS SAVED")
 print("=" * 70)
 print("  models/xgboost_efficiency.pkl")
-print("  models/xgboost_cost.pkl")
 print("  models/xgboost_autonomy.pkl")
 print("  models/feature_names.pkl")
 
