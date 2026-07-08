@@ -28,7 +28,7 @@ latitude = st.sidebar.number_input("Latitude", value=8.9, format="%.2f")
 longitude = st.sidebar.number_input("Longitude", value=79.9, format="%.2f")
 pv_kwp = st.sidebar.number_input("PV Capacity (kWp)", value=30.0, min_value=5.0, max_value=100.0)
 daily_load = st.sidebar.number_input("Daily Load (kWh/day)", value=50.0, min_value=10.0, max_value=200.0)
-autonomy_days = st.sidebar.number_input("Autonomy (days)", value=2.0, min_value=1.0, max_value=5.0)
+autonomy_days = st.sidebar.number_input("Autonomy (days)", value=2.0, min_value=0.0, max_value=5.0)
 reservoir_type = st.sidebar.selectbox("Reservoir Type", ["new_tank", "excavated", "pond", "river"])
 
 st.sidebar.header("Advanced")
@@ -173,7 +173,7 @@ if st.sidebar.button(" Optimize Design", type="primary"):
         user.evaporation_rate_mm_month = evap_rate
         
         # Run optimization (simplified)
-        population = run_optimization()
+        population = run_optimization(user)
         pareto_front = extract_pareto_front(population)
         
         if pareto_front:
