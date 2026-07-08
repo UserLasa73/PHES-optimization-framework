@@ -31,7 +31,7 @@ LOCATIONS = [
     {'name': 'Anuradhapura', 'lat': 8.3, 'lon': 80.4},
 ]
 
-SAMPLES_PER_LOCATION = 250  # 250 × 8 = 2000 samples
+SAMPLES_PER_LOCATION = 400  # 400 × 8 = 3200 samples
 
 # Reservoir type mapping
 RES_TYPE_MAP = {
@@ -59,18 +59,15 @@ BASE_USER.lower_reservoir_type = "new_tank"
 # ============================================================================
 
 BOUNDS = {
-    # Design variables (what we optimize)
-    'volume_m3': (50, 500),
-    'head_m': (10, 30),
-    'pipe_diameter_m': (0.1, 0.3),
-    'pump_power_kw': (3, 15),
-    'turbine_power_kw': (2, 10),
-    
-    # User inputs (fixed but vary in dataset)
+    'volume_m3': (50, 2000),      # ← Increase max to 2000
+    'head_m': (10, 50),           # ← Increase max to 50
+    'pipe_diameter_m': (0.1, 0.5),
+    'pump_power_kw': (3, 30),
+    'turbine_power_kw': (2, 20),
     'pv_kwp': (10, 50),
     'daily_energy_kwh': (20, 100),
     'evaporation_rate_mm_month': (30, 80),
-    'reservoir_type_code': (0, 3)  # 0=new_tank, 1=excavated, 2=pond, 3=river
+    'reservoir_type_code': (0, 3)
 }
 
 VARIABLE_NAMES = list(BOUNDS.keys())
