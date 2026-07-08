@@ -16,31 +16,33 @@ from cost_model import calculate_capital_cost
 
 
 # ============================================================================
-# CONFIGURATION
+# CONFIGURATION (Default - overridden by app)
 # ============================================================================
 
-USER = UserInputs()
-USER.latitude = 8.9
-USER.longitude = 79.9
-USER.pv_kwp = 30.0
-USER.tilt_angle = 10.0
-USER.azimuth_angle = 0.0
-USER.daily_energy_kwh = 50.0
-USER.upper_reservoir_type = "new_tank"
-USER.lower_reservoir_type = "new_tank"
-USER.autonomy_days = 0.0
-USER.evaporation_rate_mm_month = 50.0
-USER.demand_spike_factor = 1.0
-USER.has_grid_backup = False
-USER.pipe_roughness_m = 0.00015
+DEFAULT_USER = UserInputs()
+DEFAULT_USER.latitude = 8.9
+DEFAULT_USER.longitude = 79.9
+DEFAULT_USER.pv_kwp = 30.0
+DEFAULT_USER.tilt_angle = 10.0
+DEFAULT_USER.azimuth_angle = 0.0
+DEFAULT_USER.daily_energy_kwh = 50.0
+DEFAULT_USER.upper_reservoir_type = "new_tank"
+DEFAULT_USER.lower_reservoir_type = "new_tank"
+DEFAULT_USER.autonomy_days = 2.0
+DEFAULT_USER.evaporation_rate_mm_month = 50.0
+DEFAULT_USER.demand_spike_factor = 1.0
+DEFAULT_USER.has_grid_backup = False
+DEFAULT_USER.pipe_roughness_m = 0.00015
 
-# ===== EXPANDED BOUNDS =====
+CURRENT_USER = DEFAULT_USER
+
+# ===== BOUNDS =====
 BOUNDS = {
-    'volume_m3': (50, 200),      # ← Bigger range
-    'head_m': (10, 50),            # ← Bigger range
-    'pipe_diameter_m': (0.1, 0.5),
-    'pump_power_kw': (3, 30),      # ← Bigger range
-    'turbine_power_kw': (2, 20)    # ← Bigger range
+    'volume_m3': (50, 500),
+    'head_m': (10, 30),
+    'pipe_diameter_m': (0.1, 0.3),
+    'pump_power_kw': (3, 15),
+    'turbine_power_kw': (2, 10)
 }
 
 POPULATION_SIZE = 100
@@ -48,6 +50,7 @@ N_GENERATIONS = 50
 CX_PROB = 0.8
 MUT_PROB = 0.2
 
+MIN_EFFICIENCY = 80.0
 
 # ============================================================================
 # LOAD MODELS
@@ -59,78 +62,68 @@ model_auto = joblib.load('models/xgboost_autonomy.pkl')
 print("Models loaded.")
 
 RES_TYPE_MAP = {'new_tank': 0, 'excavated': 1, 'pond': 2, 'river': 3}
-RES_TYPE_CODE = RES_TYPE_MAP.get(USER.upper_reservoir_type, 0)
+
+# ===== INSERT DIAGNOSTIC HERE =====
+print("\n" + "=" * 70)
+print("DIAGNOSTIC: Testing model predictions")
+print("=" * 70)
+
+test_X = np.array([[1000, 30, 0.25, 15, 10, 30, 50, 50, 1]])
+eff = model_eff.predict(test_X)[0]
+auto = model_auto.predict(test_X)[0]
+print(f"Volume=1000, Head=30, Excavated → Eff={eff:.1f}%, Auto={auto:.2f} days")
+
+test_X2 = np.array([[400, 25, 0.25, 10, 8, 30, 50, 50, 1]])
+eff2 = model_eff.predict(test_X2)[0]
+auto2 = model_auto.predict(test_X2)[0]
+print(f"Volume=400, Head=25, Excavated → Eff={eff2:.1f}%, Auto={auto2:.2f} days")
+
+print("=" * 70)
+print("")
 
 
-# ============================================================================
-# DIAGNOSTIC
-# ============================================================================
-
-print("\nDIAGNOSTIC: Testing random designs...")
-auto_values = []
-for i in range(20):
-    test_ind = [
-        random.uniform(BOUNDS['volume_m3'][0], BOUNDS['volume_m3'][1]),
-        random.uniform(BOUNDS['head_m'][0], BOUNDS['head_m'][1]),
-        random.uniform(BOUNDS['pipe_diameter_m'][0], BOUNDS['pipe_diameter_m'][1]),
-        random.uniform(BOUNDS['pump_power_kw'][0], BOUNDS['pump_power_kw'][1]),
-        random.uniform(BOUNDS['turbine_power_kw'][0], BOUNDS['turbine_power_kw'][1])
-    ]
-    X = np.array([[
-        test_ind[0], test_ind[1], test_ind[2], test_ind[3], test_ind[4],
-        USER.pv_kwp, USER.daily_energy_kwh, USER.evaporation_rate_mm_month,
-        RES_TYPE_CODE
-    ]])
-    auto = model_auto.predict(X)[0]
-    auto_values.append(auto)
-    print(f"  Volume={test_ind[0]:.0f}, Head={test_ind[1]:.1f} → Autonomy={auto:.2f} days")
-
-print(f"\n  Max autonomy found: {max(auto_values):.2f} days")
-print(f"  Required: {USER.autonomy_days} days")
-
+# In optimization.py
+test_X = np.array([[1000, 30, 0.25, 15, 10, 30, 50, 50, 1]])
+eff = model_eff.predict(test_X)[0]
+auto = model_auto.predict(test_X)[0]
+print(f"Volume=1000, Excavated → Eff={eff:.1f}%, Auto={auto:.2f} days")
 
 # ============================================================================
 # FITNESS FUNCTION
 # ============================================================================
 
 def evaluate(individual):
-    """Evaluate a design."""
+    """Evaluate a design using the current user."""
+    
+    user = CURRENT_USER
+    res_code = RES_TYPE_MAP.get(user.upper_reservoir_type, 0)
     
     X = np.array([[
         individual[0], individual[1], individual[2], individual[3], individual[4],
-        USER.pv_kwp, USER.daily_energy_kwh, USER.evaporation_rate_mm_month,
-        RES_TYPE_CODE
+        user.pv_kwp,
+        user.daily_energy_kwh,
+        user.evaporation_rate_mm_month,
+        res_code
     ]])
     
     efficiency = model_eff.predict(X)[0]
     autonomy = model_auto.predict(X)[0]
     
-    # Cost
-    design = {
-        'volume_m3': individual[0],
-        'head_m': individual[1],
-        'pipe_diameter_m': individual[2],
-        'pump_power_kw': individual[3],
-        'turbine_power_kw': individual[4]
-    }
-    
     cost_dict = calculate_capital_cost(
-        design['volume_m3'], design['head_m'], design['pipe_diameter_m'],
-        design['pump_power_kw'], design['turbine_power_kw'],
-        USER.pv_kwp, USER.upper_reservoir_type, USER.lower_reservoir_type
+        individual[0], individual[1], individual[2],
+        individual[3], individual[4],
+        user.pv_kwp,
+        user.upper_reservoir_type,
+        user.lower_reservoir_type
     )
     cost = cost_dict['total_lkr']
     
-    # ===== CONSTRAINTS =====
-    # 1. Autonomy
-    if autonomy < USER.autonomy_days:  # 2.0 days
+    # Constraints
+    if autonomy < user.autonomy_days:
+        return [1000.0, 100000000.0]
+    if efficiency < MIN_EFFICIENCY:
         return [1000.0, 100000000.0]
     
-    # 2. Efficiency (NEW)
-    if efficiency < 80.0:
-        return [1000.0, 100000000.0]
-    
-    # Valid design
     return [-efficiency, cost]
 
 
@@ -181,16 +174,25 @@ def setup_deap():
 
 
 # ============================================================================
-# RUN
+# RUN OPTIMIZATION
 # ============================================================================
 
-def run_optimization():
+def run_optimization(user=None):
+    """Run NSGA-II optimization with the given user."""
+    
+    global CURRENT_USER
+    
+    if user is not None:
+        CURRENT_USER = user
+    else:
+        CURRENT_USER = DEFAULT_USER
+    
     print("=" * 70)
     print("NSGA-II OPTIMIZATION")
     print("=" * 70)
-    print(f"Population: {POPULATION_SIZE}")
-    print(f"Generations: {N_GENERATIONS}")
-    print(f"Autonomy Constraint: >= {USER.autonomy_days} days")
+    print(f"Reservoir Type: {CURRENT_USER.upper_reservoir_type}")
+    print(f"PV Capacity: {CURRENT_USER.pv_kwp} kWp")
+    print(f"Autonomy: >= {CURRENT_USER.autonomy_days} days")
     print("=" * 70)
     
     toolbox = setup_deap()
@@ -205,29 +207,20 @@ def run_optimization():
     population, logbook = algorithms.eaMuPlusLambda(
         population, toolbox, mu=POPULATION_SIZE, lambda_=POPULATION_SIZE,
         cxpb=CX_PROB, mutpb=MUT_PROB, ngen=N_GENERATIONS,
-        stats=stats, verbose=True
+        stats=stats, verbose=False
     )
     
     return population
+
 
 # ============================================================================
 # EXTRACT PARETO FRONT
 # ============================================================================
 
 def extract_pareto_front(population):
-    """
-    Extract Pareto front designs from NSGA-II population.
-    
-    Args:
-        population: DEAP population of individuals
-    
-    Returns:
-        list of dicts with design parameters and objectives
-    """
     pareto_front = []
-    
     for ind in population:
-        if ind.fitness.values[0] < 1000:  # Valid design (not penalized)
+        if ind.fitness.values[0] < 1000:
             pareto_front.append({
                 'volume_m3': ind[0],
                 'head_m': ind[1],
@@ -237,40 +230,4 @@ def extract_pareto_front(population):
                 'efficiency': -ind.fitness.values[0],
                 'cost': ind.fitness.values[1]
             })
-    
-    # Sort by efficiency (descending)
-    pareto_front = sorted(pareto_front, key=lambda x: x['efficiency'], reverse=True)
-    
-    return pareto_front
-
-
-# ============================================================================
-# MAIN
-# ============================================================================
-
-if __name__ == "__main__":
-    population = run_optimization()
-    
-    # Extract valid designs
-    valid = []
-    for ind in population:
-        if ind.fitness.values[0] < 1000:
-            valid.append({
-                'volume_m3': ind[0],
-                'head_m': ind[1],
-                'pipe_diameter_m': ind[2],
-                'pump_power_kw': ind[3],
-                'turbine_power_kw': ind[4],
-                'efficiency': -ind.fitness.values[0],
-                'cost': ind.fitness.values[1]
-            })
-    
-    if valid:
-        valid = sorted(valid, key=lambda x: x['efficiency'], reverse=True)
-        print("\n" + "=" * 70)
-        print(f"VALID DESIGNS FOUND: {len(valid)}")
-        print("=" * 70)
-        for i, d in enumerate(valid[:10]):
-            print(f"{i+1}: Vol={d['volume_m3']:.0f}, Head={d['head_m']:.1f}, Eff={d['efficiency']:.1f}%, Cost={d['cost']:,.0f} LKR")
-    else:
-        print("\n NO VALID DESIGNS FOUND. Try increasing bounds.")
+    return sorted(pareto_front, key=lambda x: x['efficiency'], reverse=True)
