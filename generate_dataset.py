@@ -80,18 +80,13 @@ N_VARIABLES = len(VARIABLE_NAMES)
 # ============================================================================
 
 def generate_lhs_samples(n_samples, n_vars, bounds):
-    """Generate LHS samples with log scaling for volume."""
+    """Generate Latin Hypercube samples using scipy."""
     sampler = qmc.LatinHypercube(d=n_vars)
     samples = sampler.random(n=n_samples)
     
     scaled = np.zeros_like(samples)
     for i, (low, high) in enumerate(bounds):
-        if i == 0:  # Volume: log scaling
-            log_low = np.log10(max(low, 1))
-            log_high = np.log10(high)
-            log_values = log_low + samples[:, i] * (log_high - log_low)
-            scaled[:, i] = 10 ** log_values
-        elif i == 8:  # reservoir_type_code (integer)
+        if i == 8:  # reservoir_type_code (integer)
             scaled[:, i] = np.floor(low + samples[:, i] * (high - low + 1))
             scaled[:, i] = np.clip(scaled[:, i], low, high)
         else:
