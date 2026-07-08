@@ -38,11 +38,11 @@ CURRENT_USER = DEFAULT_USER
 
 # ===== BOUNDS =====
 BOUNDS = {
-    'volume_m3': (50, 500),
-    'head_m': (10, 30),
-    'pipe_diameter_m': (0.1, 0.3),
-    'pump_power_kw': (3, 15),
-    'turbine_power_kw': (2, 10)
+    'volume_m3': (20, 300),        # ← Max 300 m³ (realistic for homes)
+    'head_m': (5, 30),             # ← Typical home hill height
+    'pipe_diameter_m': (0.05, 0.25),
+    'pump_power_kw': (2, 15),
+    'turbine_power_kw': (1, 10)
 }
 
 POPULATION_SIZE = 100
@@ -50,7 +50,7 @@ N_GENERATIONS = 50
 CX_PROB = 0.8
 MUT_PROB = 0.2
 
-MIN_EFFICIENCY = 80.0
+MIN_EFFICIENCY = 60.0
 
 # ============================================================================
 # LOAD MODELS
