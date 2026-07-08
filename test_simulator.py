@@ -38,10 +38,10 @@ print("=" * 60)
 print("FETCHING DATA")
 print("=" * 60)
 
-# ✅ FIXED: Pass user object, not individual values
+#FIXED: Pass user object, not individual values
 solar_data = fetch_solar_data(user)  # ← ONE argument
 
-# ✅ FIXED: Use fetch_load_data with user object
+# FIXED: Use fetch_load_data with user object
 load_data = fetch_load_data(user)    # ← ONE argument
 
 # ===== 4. VERIFY =====
@@ -50,15 +50,15 @@ print(f"Load length:  {len(load_data)} hours")
 
 # Trim if needed
 if len(solar_data) > 8760:
-    print(f"⚠️ Solar has {len(solar_data)} hours, trimming to 8760")
+    print(f"Solar has {len(solar_data)} hours, trimming to 8760")
     solar_data = solar_data[:8760]
 if len(load_data) > 8760:
-    print(f"⚠️ Load has {len(load_data)} hours, trimming to 8760")
+    print(f"Load has {len(load_data)} hours, trimming to 8760")
     load_data = load_data[:8760]
 
 assert len(solar_data) == 8760, f"Solar is {len(solar_data)}, expected 8760"
 assert len(load_data) == 8760, f"Load is {len(load_data)}, expected 8760"
-print("✅ Both solar and load data have 8760 hours!")
+print("Both solar and load data have 8760 hours!")
 
 print(f"\nTotal Solar: {sum(solar_data):.0f} kWh/year")
 print(f"Total Load:  {sum(load_data):.0f} kWh/year")
@@ -81,6 +81,51 @@ print("\n Running simulation...")
 sim = PumpedHydroSimulator(user, design)
 results = sim.simulate(solar_data, load_data)
 
+metrics = results['metrics']
+
+# ===== 7. DIAGNOSTIC: Check simulation totals =====
+print("\n" + "=" * 60)
+print("DIAGNOSTIC: Simulation Totals")
+print("=" * 60)
+
+total_pumped = metrics['total_pumped_kwh']
+total_generated = metrics['total_generated_kwh']
+total_unmet = metrics['total_unmet_kwh']
+total_curtailed = metrics['total_curtailed_kwh']
+total_load = sum(load_data)
+
+print(f"Total Load:        {total_load:.0f} kWh")
+print(f"Total Pumped:      {total_pumped:.0f} kWh")
+print(f"Total Generated:   {total_generated:.0f} kWh")
+print(f"Total Unmet:       {total_unmet:.0f} kWh")
+print(f"Total Curtailed:   {total_curtailed:.0f} kWh")
+
+# ===== CORRECT ENERGY BALANCE =====
+load_met = total_load - total_unmet
+energy_in = total_generated + total_curtailed
+
+print(f"\nEnergy Balance Check:")
+print(f"  Load Met (Load - Unmet):     {load_met:.0f} kWh")
+print(f"  Generated + Curtailed:       {energy_in:.0f} kWh")
+
+if abs(energy_in - load_met) < 100:
+    print("  Energy balance is conserved!")
+else:
+    print(f"  Energy imbalance: {energy_in - load_met:.0f} kWh")
+
+# Check efficiency calculation
+efficiency = metrics['efficiency_percent']
+manual_efficiency = (total_generated / total_pumped) * 100 if total_pumped > 0 else 0
+
+print(f"\nEfficiency Check:")
+print(f"  Simulator Efficiency: {efficiency:.2f}%")
+print(f"  Manual Efficiency:    {manual_efficiency:.2f}%")
+
+if abs(efficiency - manual_efficiency) < 0.01:
+    print("  Efficiency calculation is consistent!")
+else:
+    print(f"  Efficiency mismatch: {efficiency - manual_efficiency:.2f}%")
+
 # ===== 6. DISPLAY RESULTS =====
 metrics = results['metrics']
 
@@ -89,7 +134,7 @@ print("RESULTS")
 print("=" * 60)
 print(f"Efficiency: {metrics['efficiency_percent']:.1f}%")
 print(f"Autonomy: {metrics['autonomy_days']:.1f} days (needed: {user.autonomy_days} days)")
-print(f"Autonomy Met: {'✅ YES' if metrics['autonomy_met'] else '❌ NO'}")
+print(f"Autonomy Met: {'YES' if metrics['autonomy_met'] else 'NO'}")
 print(f"Capital Cost: {metrics['capital_cost_lkr']:,.0f} LKR")
 print(f"\nEnergy Summary:")
 print(f"  Pumped: {metrics['total_pumped_kwh']:.0f} kWh")
