@@ -31,7 +31,7 @@ LOCATIONS = [
     {'name': 'Anuradhapura', 'lat': 8.3, 'lon': 80.4},
 ]
 
-SAMPLES_PER_LOCATION = 400  # 400 × 8 = 3200 samples
+SAMPLES_PER_LOCATION = 500  # 500 × 8 = 4000 samples
 
 # Reservoir type mapping
 RES_TYPE_MAP = {
@@ -59,13 +59,13 @@ BASE_USER.lower_reservoir_type = "new_tank"
 # ============================================================================
 
 BOUNDS = {
-    'volume_m3': (50, 2000),      # ← Increase max to 2000
-    'head_m': (10, 50),           # ← Increase max to 50
-    'pipe_diameter_m': (0.1, 0.5),
-    'pump_power_kw': (3, 30),
-    'turbine_power_kw': (2, 20),
-    'pv_kwp': (10, 50),
-    'daily_energy_kwh': (20, 100),
+    'volume_m3': (50, 2000),        # Small to large
+    'head_m': (5, 50),              # Very low to very high
+    'pipe_diameter_m': (0.05, 0.5), # Tiny to huge
+    'pump_power_kw': (2, 50),       # Small to large pump
+    'turbine_power_kw': (2, 40),    # Small to large turbine
+    'pv_kwp': (5, 50),
+    'daily_energy_kwh': (10, 100),
     'evaporation_rate_mm_month': (30, 80),
     'reservoir_type_code': (0, 3)
 }
