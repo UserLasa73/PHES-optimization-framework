@@ -50,7 +50,7 @@ N_GENERATIONS = 50
 CX_PROB = 0.8
 MUT_PROB = 0.2
 
-MIN_EFFICIENCY = 60.0
+MIN_EFFICIENCY = 0.0
 
 # ============================================================================
 # LOAD MODELS
