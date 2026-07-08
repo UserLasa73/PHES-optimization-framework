@@ -15,8 +15,25 @@ from cost_model import calculate_capital_cost
 
 st.set_page_config(page_title="PHES Optimizer", layout="wide")
 
-st.title("⚡ Solar-Pumped Hydro Energy Storage Optimizer")
+st.title(" Solar-Pumped Hydro Energy Storage Optimizer")
 st.markdown("Design your own small-scale PHES system in seconds.")
+
+# ============================================================================
+# LOCATIONS DATABASE (Hardcoded)
+# ============================================================================
+
+LOCATIONS = [
+    {'name': 'Vavuniya', 'lat': 8.9, 'lon': 79.9},
+    {'name': 'Colombo', 'lat': 6.9, 'lon': 79.9},
+    {'name': 'Jaffna', 'lat': 9.7, 'lon': 80.0},
+    {'name': 'Kandy', 'lat': 7.3, 'lon': 80.6},
+    {'name': 'Galle', 'lat': 6.0, 'lon': 80.2},
+    {'name': 'Trincomalee', 'lat': 8.6, 'lon': 81.2},
+    {'name': 'Batticaloa', 'lat': 7.7, 'lon': 81.7},
+    {'name': 'Anuradhapura', 'lat': 8.3, 'lon': 80.4},
+]
+
+LOCATION_NAMES = [loc['name'] for loc in LOCATIONS]
 
 # ============================================================================
 # SIDEBAR - USER INPUTS
@@ -24,25 +41,42 @@ st.markdown("Design your own small-scale PHES system in seconds.")
 
 st.sidebar.header("Site Parameters")
 
-latitude = st.sidebar.number_input("Latitude", value=8.9, format="%.2f")
-longitude = st.sidebar.number_input("Longitude", value=79.9, format="%.2f")
-pv_kwp = st.sidebar.number_input("PV Capacity (kWp)", value=30.0, min_value=5.0, max_value=100.0)
-daily_load = st.sidebar.number_input("Daily Load (kWh/day)", value=50.0, min_value=10.0, max_value=200.0)
-autonomy_days = st.sidebar.number_input("Autonomy (days)", value=2.0, min_value=0.0, max_value=5.0)
-reservoir_type = st.sidebar.selectbox("Reservoir Type", ["new_tank", "excavated", "pond", "river"])
+# Location dropdown (instead of lat/lon)
+selected_location = st.sidebar.selectbox("Location", LOCATION_NAMES, index=0)
 
-st.sidebar.header("Advanced")
-evap_rate = st.sidebar.number_input("Evaporation Rate (mm/month)", value=50.0)
+# Get coordinates from selected location
+location_data = next(loc for loc in LOCATIONS if loc['name'] == selected_location)
+latitude = location_data['lat']
+longitude = location_data['lon']
+
+# Show coordinates (read-only feedback)
+st.sidebar.caption(f"Latitude: {latitude}°N, Longitude: {longitude}°E")
+
+st.sidebar.divider()
+
+st.sidebar.header(" System Parameters")
+
+pv_kwp = st.sidebar.number_input("PV Capacity (kWp)", value=10.0, min_value=5.0, max_value=100.0, step=1.0)
+daily_load = st.sidebar.number_input("Daily Load (kWh/day)", value=20.0, min_value=10.0, max_value=200.0, step=5.0)
+autonomy_days = st.sidebar.number_input("Autonomy (days)", value=2.0, min_value=0.0, max_value=5.0, step=0.5)
+reservoir_type = st.sidebar.selectbox("Reservoir Type", ["new_tank", "excavated", "pond", "river"], index=0)
+
+st.sidebar.divider()
+
+st.sidebar.header(" Advanced")
+
+evap_rate = st.sidebar.number_input("Evaporation Rate (mm/month)", value=50.0, min_value=20.0, max_value=100.0, step=5.0)
+pipe_roughness = st.sidebar.number_input("Pipe Roughness (m)", value=0.00015, format="%.5f", help="0.00015 = steel pipe, 0.0000015 = PVC")
 
 # ============================================================================
-# Display Prices
+# DISPLAY SHOPPING LIST
 # ============================================================================
+
 def display_shopping_list(design, user):
-    """Display shopping list using the cost model (single source of truth)."""
+    """Display shopping list using the cost model."""
     
     st.subheader("Shopping List / Bill of Materials")
     
-    # ===== USE THE COST MODEL =====
     cost_dict = calculate_capital_cost(
         design['volume_m3'],
         design['head_m'],
@@ -57,7 +91,6 @@ def display_shopping_list(design, user):
     total = cost_dict['total_lkr']
     breakdown = cost_dict['breakdown']
     
-    # ===== DISPLAY =====
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         st.markdown("**1. Two Reservoirs**")
@@ -151,7 +184,7 @@ def display_shopping_list(design, user):
         st.markdown(" ")
         st.markdown(f"### **LKR {total:,.0f}**")
     
-    st.caption("*These are estimated costs for design comparison. Actual prices may vary by supplier, location, and market conditions. Get local quotes for accurate pricing.*")
+    st.caption("*Estimated costs for design comparison. Actual prices may vary.*")
 
 # ============================================================================
 # RUN OPTIMIZATION
@@ -163,27 +196,31 @@ if st.sidebar.button(" Optimize Design", type="primary"):
         
         # Create user inputs
         user = UserInputs()
+        user.location = selected_location
         user.latitude = latitude
         user.longitude = longitude
         user.pv_kwp = pv_kwp
+        user.tilt_angle = 10.0
+        user.azimuth_angle = 0.0
         user.daily_energy_kwh = daily_load
         user.autonomy_days = autonomy_days
         user.upper_reservoir_type = reservoir_type
         user.lower_reservoir_type = reservoir_type
         user.evaporation_rate_mm_month = evap_rate
+        user.pipe_roughness_m = pipe_roughness
+        user.demand_spike_factor = 1.0
+        user.has_grid_backup = False
         
-        # Run optimization (simplified)
+        # Run optimization
         population = run_optimization(user)
         pareto_front = extract_pareto_front(population)
         
         if pareto_front:
             df = pd.DataFrame(pareto_front)
             
-            # Display results
-            st.success(f" Found {len(df)} optimal designs!")
+            st.success(f"Found {len(df)} optimal designs!")
             
-            # Table
-            st.subheader(" Optimal Designs (Pareto Front)")
+            st.subheader("Optimal Designs (Pareto Front)")
             st.dataframe(df.style.format({
                 'volume_m3': '{:.0f}',
                 'head_m': '{:.1f}',
@@ -194,22 +231,22 @@ if st.sidebar.button(" Optimize Design", type="primary"):
                 'cost': 'LKR {:.0f}'
             }))
             
-            # Best design
             best = df.iloc[0]
             st.subheader(" Best Design")
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             col1.metric("Efficiency", f"{best['efficiency']:.1f}%")
             col2.metric("Cost", f"LKR {best['cost']:,.0f}")
             col3.metric("Volume", f"{best['volume_m3']:.0f} m³")
+            col4.metric("Head", f"{best['head_m']:.1f} m")
             
             # Pareto front plot
             fig = px.scatter(df, x='cost', y='efficiency', 
                              title='Pareto Front: Efficiency vs Cost',
-                             labels={'cost': 'Cost (LKR)', 'efficiency': 'Efficiency (%)'})
+                             labels={'cost': 'Cost (LKR)', 'efficiency': 'Efficiency (%)'},
+                             hover_data=['volume_m3', 'head_m', 'pipe_diameter_m'])
             st.plotly_chart(fig, use_container_width=True)
             
-            # ===== SHOW SHOPPING LIST =====
-            best = df.iloc[0]  # Get the best design
+            # Shopping list
             display_shopping_list(best, user)
         
             # Download
@@ -218,4 +255,3 @@ if st.sidebar.button(" Optimize Design", type="primary"):
             
         else:
             st.error(" No valid designs found. Try relaxing constraints or increasing bounds.")
-
