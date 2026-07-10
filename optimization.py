@@ -41,8 +41,8 @@ BOUNDS = {
     'volume_m3': (20, 300),        # ← Max 300 m³ (realistic for homes)
     'head_m': (5, 30),             # ← Typical home hill height
     'pipe_diameter_m': (0.05, 0.25),
-    'pump_power_kw': (2, 15),
-    'turbine_power_kw': (1, 10)
+    'pump_power_kw': (2, 30),
+    'turbine_power_kw': (2, 25)
 }
 
 POPULATION_SIZE = 100
