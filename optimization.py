@@ -119,12 +119,23 @@ def evaluate(individual):
     cost = cost_dict['total_lkr']
     
     # Constraints
-    if autonomy < user.autonomy_days:
-        return [1000.0, 100000000.0]
-    if efficiency < MIN_EFFICIENCY:
-        return [1000.0, 100000000.0]
+    # ===== SOFT CONSTRAINTS (PENALTY, NOT REJECTION) =====
+    penalty = 0.0
     
-    return [-efficiency, cost]
+    # Penalty for low efficiency (instead of rejecting)
+    if efficiency < 80.0:
+        penalty += (80.0 - efficiency) * 1000  # Add penalty
+    
+    # Penalty for low autonomy (instead of rejecting)
+    if autonomy < user.autonomy_days:
+        penalty += (user.autonomy_days - autonomy) * 100000  # Add penalty
+    
+    # ===== OBJECTIVE WITH PENALTY =====
+    # This way, designs that FAIL constraints still appear, 
+    # but they have a penalty added to their cost
+    adjusted_cost = cost + penalty
+    
+    return [-efficiency, adjusted_cost]
 
 
 # ============================================================================
