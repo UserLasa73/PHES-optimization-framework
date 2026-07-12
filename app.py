@@ -10,7 +10,6 @@ import joblib
 import plotly.express as px
 
 from user_inputs import UserInputs
-from optimization import run_optimization, extract_pareto_front
 from cost_model import calculate_capital_cost
 
 st.set_page_config(page_title="PHES Optimizer", layout="wide")
@@ -67,6 +66,20 @@ st.sidebar.header(" Advanced")
 
 evap_rate = st.sidebar.number_input("Evaporation Rate (mm/month)", value=50.0, min_value=20.0, max_value=100.0, step=5.0)
 pipe_roughness = st.sidebar.number_input("Pipe Roughness (m)", value=0.00015, format="%.5f", help="0.00015 = steel pipe, 0.0000015 = PVC")
+
+
+st.sidebar.divider()
+
+st.sidebar.header("Optimization Mode")
+
+optimization_mode = st.sidebar.radio(
+    "Select Optimizer",
+    ["ML Surrogate (Fast)", "Physics Simulator (Slow)"],
+    index=0,
+    help="ML Surrogate is fast but approximate. Physics Simulator is slow but accurate."
+)
+
+
 
 # ============================================================================
 # DISPLAY SHOPPING LIST
@@ -212,12 +225,45 @@ if st.sidebar.button(" Optimize Design", type="primary"):
         user.has_grid_backup = False
         
         # Run optimization
-        population = run_optimization(user)
-        pareto_front = extract_pareto_front(population)
+        # ===== RUN OPTIMIZATION (Choose mode) =====
+        if optimization_mode == "ML Surrogate (Fast)":
+            from optimization import run_optimization, extract_pareto_front
+            population = run_optimization(user)
+            pareto_front = extract_pareto_front(population)
+        else:
+            from optimization_physics import run_optimization_physics, extract_pareto_front_physics
+            population = run_optimization_physics(user)
+            pareto_front = extract_pareto_front_physics(population)
         
         if pareto_front:
             df = pd.DataFrame(pareto_front)
             
+            # ===== PRINT TO TERMINAL =====
+            print("\n" + "=" * 70)
+            print("OPTIMAL DESIGN (from Streamlit)")
+            print("=" * 70)
+            print(f"Mode: {optimization_mode}")
+            print(f"Location: {selected_location}")
+            print(f"PV Capacity: {pv_kwp} kWp")
+            print(f"Daily Load: {daily_load} kWh/day")
+            print(f"Autonomy Required: {autonomy_days} days")
+            print(f"Reservoir Type: {reservoir_type}")
+            print("-" * 70)
+            
+            best = df.iloc[0]
+            print(f"BEST DESIGN:")
+            print(f"  Reservoir Volume: {best['volume_m3']:.0f} m3")
+            print(f"  Head Height:      {best['head_m']:.1f} m")
+            print(f"  Pipe Diameter:    {best['pipe_diameter_m']:.3f} m")
+            print(f"  Pump Power:       {best['pump_power_kw']:.1f} kW")
+            print(f"  Turbine Power:    {best['turbine_power_kw']:.1f} kW")
+            print(f"  Efficiency:       {best['efficiency']:.1f}%")
+            print(f"  Cost:             LKR {best['cost']:,.0f}")
+            print("=" * 70)
+            
+            # ===== STREAMLIT DISPLAY =====
+
+
             st.success(f"Found {len(df)} optimal designs!")
             
             st.subheader("Optimal Designs (Pareto Front)")
