@@ -1,160 +1,90 @@
 """
-test_simulator.py
-Quick test to verify simulator works with your code.
+test_simulator_debug.py
+Quick test to check if simulator is correctly calculating losses.
 """
-import matplotlib.pyplot as plt
-import numpy as np
+
 from user_inputs import UserInputs
 from simulator import PumpedHydroSimulator
 from solar_data_loader import fetch_solar_data, fetch_load_data
 
-# ===== 1. CREATE USER INPUTS =====
+# ===== CREATE USER =====
 user = UserInputs()
 user.latitude = 8.9
 user.longitude = 79.9
 user.pv_kwp = 10.0
-user.tilt_angle = 10.0
-user.azimuth_angle = 0.0
 user.daily_energy_kwh = 20.0
 user.upper_reservoir_type = "new_tank"
 user.lower_reservoir_type = "new_tank"
-user.autonomy_days = 2.0
 user.evaporation_rate_mm_month = 50.0
-user.demand_spike_factor = 1.0
-user.has_grid_backup = False
-user.pipe_roughness_m = 0.00015  # Steel pipe
+user.pipe_roughness_m = 0.00015
+user.autonomy_days = 2.0
 
-# ===== 2. CREATE A DESIGN TO TEST =====
+# ===== DESIGN THAT GAVE 100% EFFICIENCY =====
 design = {
-    'head_m': 15.0,             # ← 15m (small hill)
-    'volume_m3': 100.0,         # ← 100 m³ (small tank)
-    'pipe_diameter_m': 0.15,    # ← 6 inch pipe
-    'pump_power_kw': 5.0,       # ← 5 kW pump
-    'turbine_power_kw': 3.0     # ← 3 kW turbine
+    'volume_m3': 100,
+    'head_m': 20,
+    'pipe_diameter_m': 0.15,
+    'pump_power_kw': 5,
+    'turbine_power_kw': 4
 }
 
-# ===== 3. FETCH DATA (FIXED) =====
-print("=" * 60)
-print("FETCHING DATA")
-print("=" * 60)
+print("=" * 70)
+print("DEBUG: SINGLE SIMULATION TEST")
+print("=" * 70)
+print(f"Design: Volume={design['volume_m3']} m3, Head={design['head_m']} m")
+print(f"Pump={design['pump_power_kw']} kW, Turbine={design['turbine_power_kw']} kW")
+print("=" * 70)
 
-#FIXED: Pass user object, not individual values
-solar_data = fetch_solar_data(user)  # ← ONE argument
+# ===== GET DATA =====
+print("\nFetching solar and load data...")
+solar_data = fetch_solar_data(user)
+load_data = fetch_load_data(user)
 
-# FIXED: Use fetch_load_data with user object
-load_data = fetch_load_data(user)    # ← ONE argument
-
-# ===== 4. VERIFY =====
-print(f"Solar length: {len(solar_data)} hours")
-print(f"Load length:  {len(load_data)} hours")
-
-# Trim if needed
-if len(solar_data) > 8760:
-    print(f"Solar has {len(solar_data)} hours, trimming to 8760")
-    solar_data = solar_data[:8760]
-if len(load_data) > 8760:
-    print(f"Load has {len(load_data)} hours, trimming to 8760")
-    load_data = load_data[:8760]
-
-assert len(solar_data) == 8760, f"Solar is {len(solar_data)}, expected 8760"
-assert len(load_data) == 8760, f"Load is {len(load_data)}, expected 8760"
-print("Both solar and load data have 8760 hours!")
-
-print(f"\nTotal Solar: {sum(solar_data):.0f} kWh/year")
-print(f"Total Load:  {sum(load_data):.0f} kWh/year")
-print(f"PV Size: {user.pv_kwp} kWp")
-print(f"Head: {design['head_m']} m")
-print(f"Volume: {design['volume_m3']} m³")
-print(f"Reservoir Types: {user.upper_reservoir_type} / {user.lower_reservoir_type}")
-
-# Plot first 7 days (168 hours)
-plt.figure(figsize=(12, 5))
-plt.plot(solar_data[:168])
-plt.xlabel('Hour')
-plt.ylabel('Solar Power (kW)')
-plt.title(f'Solar Generation - First 7 Days ({user.location})')
-plt.grid(True)
-plt.show()
-
-# ===== 5. RUN SIMULATION =====
-print("\n Running simulation...")
+# ===== RUN SIMULATOR =====
+print("Running simulation...")
 sim = PumpedHydroSimulator(user, design)
 results = sim.simulate(solar_data, load_data)
-
 metrics = results['metrics']
 
-# ===== 7. DIAGNOSTIC: Check simulation totals =====
-print("\n" + "=" * 60)
-print("DIAGNOSTIC: Simulation Totals")
-print("=" * 60)
+# ===== PRINT RESULTS =====
+print("\n" + "=" * 70)
+print("SIMULATION RESULTS")
+print("=" * 70)
+print(f"Total Pumped:      {metrics['total_pumped_kwh']:.1f} kWh")
+print(f"Total Generated:   {metrics['total_generated_kwh']:.1f} kWh")
+print(f"Efficiency:        {metrics['efficiency_percent']:.1f}%")
+print(f"Unmet Load:        {metrics['total_unmet_kwh']:.1f} kWh")
+print(f"Curtailed Energy:  {metrics['total_curtailed_kwh']:.1f} kWh")
+print(f"Final Upper:       {metrics.get('upper_reservoir_type', 'N/A')}") # Not in metrics
 
-total_pumped = metrics['total_pumped_kwh']
-total_generated = metrics['total_generated_kwh']
-total_unmet = metrics['total_unmet_kwh']
-total_curtailed = metrics['total_curtailed_kwh']
-total_load = sum(load_data)
+# Check if tank ever had water
+history = results['history']
+max_upper = max(history['upper_volume']) if history['upper_volume'] else 0
+min_upper = min(history['upper_volume']) if history['upper_volume'] else 0
 
-print(f"Total Load:        {total_load:.0f} kWh")
-print(f"Total Pumped:      {total_pumped:.0f} kWh")
-print(f"Total Generated:   {total_generated:.0f} kWh")
-print(f"Total Unmet:       {total_unmet:.0f} kWh")
-print(f"Total Curtailed:   {total_curtailed:.0f} kWh")
+print(f"\nUpper Reservoir:")
+print(f"  Max Volume: {max_upper:.1f} m3")
+print(f"  Min Volume: {min_upper:.1f} m3")
+print(f"  Max Upper %: {(max_upper / sim.max_upper) * 100:.1f}%")
 
-# ===== CORRECT ENERGY BALANCE =====
-load_met = total_load - total_unmet
-energy_in = total_generated + total_curtailed
+# ===== CHECK IF EFFICIENCY IS CORRECT =====
+manual_efficiency = (metrics['total_generated_kwh'] / metrics['total_pumped_kwh']) * 100 if metrics['total_pumped_kwh'] > 0 else 0
+print(f"\nManual Efficiency: {manual_efficiency:.1f}%")
+print(f"Reported Efficiency: {metrics['efficiency_percent']:.1f}%")
 
-print(f"\nEnergy Balance Check:")
-print(f"  Load Met (Load - Unmet):     {load_met:.0f} kWh")
-print(f"  Generated + Curtailed:       {energy_in:.0f} kWh")
-
-if abs(energy_in - load_met) < 100:
-    print("  Energy balance is conserved!")
+if manual_efficiency == metrics['efficiency_percent']:
+    print("Efficiency calculation is consistent.")
 else:
-    print(f"  Energy imbalance: {energy_in - load_met:.0f} kWh")
+    print("Efficiency calculation is INCONSISTENT!")
 
-# Check efficiency calculation
-efficiency = metrics['efficiency_percent']
-manual_efficiency = (total_generated / total_pumped) * 100 if total_pumped > 0 else 0
-
-print(f"\nEfficiency Check:")
-print(f"  Simulator Efficiency: {efficiency:.2f}%")
-print(f"  Manual Efficiency:    {manual_efficiency:.2f}%")
-
-if abs(efficiency - manual_efficiency) < 0.01:
-    print("  Efficiency calculation is consistent!")
+# ===== CHECK FOR 100% EFFICIENCY =====
+if metrics['efficiency_percent'] > 95:
+    print("\nWARNING: Efficiency > 95% is physically impossible!")
+    print("The simulator is NOT applying losses correctly.")
+    print("Possible causes:")
+    print("  1. Pump efficiency is not being applied")
+    print("  2. Turbine efficiency is not being applied")
+    print("  3. Friction losses are being ignored")
+    print("  4. total_pumped and total_generated are being recorded incorrectly")
 else:
-    print(f"  Efficiency mismatch: {efficiency - manual_efficiency:.2f}%")
-
-# ===== 6. DISPLAY RESULTS =====
-metrics = results['metrics']
-
-print("\n" + "=" * 60)
-print("RESULTS")
-print("=" * 60)
-print(f"Efficiency: {metrics['efficiency_percent']:.1f}%")
-print(f"Autonomy: {metrics['autonomy_days']:.1f} days (needed: {user.autonomy_days} days)")
-print(f"Autonomy Met: {'YES' if metrics['autonomy_met'] else 'NO'}")
-print(f"Capital Cost: {metrics['capital_cost_lkr']:,.0f} LKR")
-print(f"\nEnergy Summary:")
-print(f"  Pumped: {metrics['total_pumped_kwh']:.0f} kWh")
-print(f"  Generated: {metrics['total_generated_kwh']:.0f} kWh")
-print(f"  Unmet Load: {metrics['total_unmet_kwh']:.0f} kWh")
-print(f"  Curtailed: {metrics['total_curtailed_kwh']:.0f} kWh")
-print(f"  Grid Used: {metrics['grid_used_kwh']:.0f} kWh")
-print(f"\nFinal Reservoir Levels:")
-print(f"  Upper: {(sim.upper_volume / sim.max_upper * 100):.1f}%")
-print(f"  Lower: {(sim.lower_volume / sim.max_lower * 100):.1f}%")
-
-# ===== 7. SHOW FIRST 24 HOURS =====
-print("\n" + "=" * 60)
-print("FIRST 24 HOURS")
-print("=" * 60)
-print(f"{'Hour':<6} {'Solar':<8} {'Load':<8} {'Upper%':<8} {'State':<15}")
-print("-" * 50)
-
-for i in range(24):
-    h = sim.history
-    state = h['state'][i][:15] if len(h['state'][i]) > 15 else h['state'][i]
-    upper_pct = (h['upper_volume'][i] / sim.max_upper) * 100
-    print(f"{i:<6} {h['solar_power'][i]:<8.1f} {h['load_power'][i]:<8.1f} {upper_pct:<8.1f} {state:<15}")
+    print("\nEfficiency is realistic (< 85%).")

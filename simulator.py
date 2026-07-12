@@ -102,7 +102,7 @@ class PumpedHydroSimulator:
                     self.lower_volume -= pump_vol
                     
                     # Record energy
-                    pumped = power_used  # ← ALWAYS power_used
+                    pumped = min(excess, self.pump_power)  # Energy actually used for pumping
                     curtailed = max(0, excess - power_used)  # Remaining solar wasted
                     state = 'pumping'
                 else:
