@@ -21,11 +21,11 @@ user.autonomy_days = 2.0
 
 # ===== DESIGN THAT GAVE 100% EFFICIENCY =====
 design = {
-    'volume_m3': 100,
-    'head_m': 20,
-    'pipe_diameter_m': 0.15,
-    'pump_power_kw': 5,
-    'turbine_power_kw': 4
+    'volume_m3': 800,
+    'head_m': 44.4,
+    'pipe_diameter_m': 0.339,
+    'pump_power_kw': 4.5,
+    'turbine_power_kw': 11.1
 }
 
 print("=" * 70)
