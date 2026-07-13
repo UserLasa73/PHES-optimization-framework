@@ -38,11 +38,11 @@ CURRENT_USER = DEFAULT_USER
 
 # ===== BOUNDS =====
 BOUNDS = {
-    'volume_m3': (20, 300),        # ← Max 300 m³ (realistic for homes)
-    'head_m': (5, 30),             # ← Typical home hill height
-    'pipe_diameter_m': (0.05, 0.25),
-    'pump_power_kw': (2, 30),
-    'turbine_power_kw': (2, 25)
+    'volume_m3': (20, 800),        # ← MATCH the training range
+    'head_m': (5, 45),             # ← MATCH the training range
+    'pipe_diameter_m': (0.05, 0.35), # ← MATCH the training range
+    'pump_power_kw': (2, 30),      # ← MATCH the training range
+    'turbine_power_kw': (2, 25)    # ← MATCH the training range
 }
 
 POPULATION_SIZE = 100
