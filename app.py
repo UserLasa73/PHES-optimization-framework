@@ -59,6 +59,15 @@ pv_kwp = st.sidebar.number_input("PV Capacity (kWp)", value=10.0, min_value=5.0,
 daily_load = st.sidebar.number_input("Daily Load (kWh/day)", value=20.0, min_value=10.0, max_value=200.0, step=5.0)
 autonomy_days = st.sidebar.number_input("Autonomy (days)", value=2.0, min_value=0.0, max_value=5.0, step=0.5)
 reservoir_type = st.sidebar.selectbox("Reservoir Type", ["new_tank", "excavated", "pond", "river"], index=0)
+# Reservoir Volume Constraint
+st.sidebar.subheader("Reservoir Volume Constraint")
+max_volume_m3 = st.sidebar.number_input(
+    "Maximum Total Volume (m³)",
+    min_value=20,
+    value=800,
+    step=10,
+    help="Designs with volume exceeding this will be penalized"
+)
 
 st.sidebar.divider()
 
@@ -223,6 +232,7 @@ if st.sidebar.button(" Optimize Design", type="primary"):
         user.pipe_roughness_m = pipe_roughness
         user.demand_spike_factor = 1.0
         user.has_grid_backup = False
+        user.max_volume_m3= max_volume_m3 
         
         # Run optimization
         # ===== RUN OPTIMIZATION (Choose mode) =====

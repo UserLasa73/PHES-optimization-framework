@@ -34,23 +34,39 @@ DEFAULT_USER.demand_spike_factor = 1.0
 DEFAULT_USER.has_grid_backup = False
 DEFAULT_USER.pipe_roughness_m = 0.00015
 
+# NEW: User volume constraint (only max needed)
+DEFAULT_USER.max_volume_m3 = 800  # Default matches original hard-coded bound
+
 CURRENT_USER = DEFAULT_USER
 
-# ===== BOUNDS =====
-BOUNDS = {
-    'volume_m3': (20, 800),        # ← MATCH the training range
-    'head_m': (5, 45),             # ← MATCH the training range
-    'pipe_diameter_m': (0.05, 0.35), # ← MATCH the training range
-    'pump_power_kw': (2, 30),      # ← MATCH the training range
-    'turbine_power_kw': (2, 25)    # ← MATCH the training range
-}
-
+# ===== CONSTANTS =====
 POPULATION_SIZE = 100
 N_GENERATIONS = 50
 CX_PROB = 0.8
 MUT_PROB = 0.2
 
 MIN_EFFICIENCY = 0.0
+
+# ============================================================================
+# GET DYNAMIC BOUNDS
+# ============================================================================
+
+def get_bounds(user=None):
+    """Get optimization bounds based on user inputs."""
+    
+    if user is None:
+        user = CURRENT_USER
+    
+    bounds = {
+        'volume_m3': (20, user.max_volume_m3),  # ← Min is fixed at 20 (from training data)
+        'head_m': (5, 45),
+        'pipe_diameter_m': (0.05, 0.35),
+        'pump_power_kw': (2, 30),
+        'turbine_power_kw': (2, 25)
+    }
+    
+    return bounds
+
 
 # ============================================================================
 # LOAD MODELS
@@ -62,31 +78,6 @@ model_auto = joblib.load('models/xgboost_autonomy.pkl')
 print("Models loaded.")
 
 RES_TYPE_MAP = {'new_tank': 0, 'excavated': 1, 'pond': 2, 'river': 3}
-
-# ===== INSERT DIAGNOSTIC HERE =====
-print("\n" + "=" * 70)
-print("DIAGNOSTIC: Testing model predictions")
-print("=" * 70)
-
-test_X = np.array([[1000, 30, 0.25, 15, 10, 30, 50, 50, 1]])
-eff = model_eff.predict(test_X)[0]
-auto = model_auto.predict(test_X)[0]
-print(f"Volume=1000, Head=30, Excavated → Eff={eff:.1f}%, Auto={auto:.2f} days")
-
-test_X2 = np.array([[400, 25, 0.25, 10, 8, 30, 50, 50, 1]])
-eff2 = model_eff.predict(test_X2)[0]
-auto2 = model_auto.predict(test_X2)[0]
-print(f"Volume=400, Head=25, Excavated → Eff={eff2:.1f}%, Auto={auto2:.2f} days")
-
-print("=" * 70)
-print("")
-
-
-# In optimization.py
-test_X = np.array([[1000, 30, 0.25, 15, 10, 30, 50, 50, 1]])
-eff = model_eff.predict(test_X)[0]
-auto = model_auto.predict(test_X)[0]
-print(f"Volume=1000, Excavated → Eff={eff:.1f}%, Auto={auto:.2f} days")
 
 # ============================================================================
 # FITNESS FUNCTION
@@ -118,41 +109,56 @@ def evaluate(individual):
     )
     cost = cost_dict['total_lkr']
     
-    # Constraints
     # ===== SOFT CONSTRAINTS (PENALTY, NOT REJECTION) =====
     penalty = 0.0
     
-    # Penalty for low efficiency (instead of rejecting)
+    # Penalty for low efficiency
     if efficiency < 80.0:
-        penalty += (80.0 - efficiency) * 1000  # Add penalty
+        penalty += (80.0 - efficiency) * 1000
     
-    # Penalty for low autonomy (instead of rejecting)
+    # Penalty for low autonomy
     if autonomy < user.autonomy_days:
-        penalty += (user.autonomy_days - autonomy) * 100000  # Add penalty
+        penalty += (user.autonomy_days - autonomy) * 100000
+    
+    # NEW: Penalty for exceeding max volume
+    if individual[0] > user.max_volume_m3:
+        penalty += (individual[0] - user.max_volume_m3) * 100000
     
     # ===== OBJECTIVE WITH PENALTY =====
-    # This way, designs that FAIL constraints still appear, 
-    # but they have a penalty added to their cost
     adjusted_cost = cost + penalty
     
     return [-efficiency, adjusted_cost]
 
 
 # ============================================================================
-# SETUP DEAP
+# SETUP DEAP (UPDATED TO USE DYNAMIC BOUNDS)
 # ============================================================================
 
-def setup_deap():
+def setup_deap(user=None):
+    """Setup DEAP with dynamic bounds from user."""
+    
+    if user is None:
+        user = CURRENT_USER
+    
+    # Get dynamic bounds
+    bounds = get_bounds(user)
+    
     creator.create("FitnessMin", base.Fitness, weights=(-1.0, 1.0))
     creator.create("Individual", list, fitness=creator.FitnessMin)
     
     toolbox = base.Toolbox()
     
-    toolbox.register("attr_volume", random.uniform, BOUNDS['volume_m3'][0], BOUNDS['volume_m3'][1])
-    toolbox.register("attr_head", random.uniform, BOUNDS['head_m'][0], BOUNDS['head_m'][1])
-    toolbox.register("attr_pipe", random.uniform, BOUNDS['pipe_diameter_m'][0], BOUNDS['pipe_diameter_m'][1])
-    toolbox.register("attr_pump", random.uniform, BOUNDS['pump_power_kw'][0], BOUNDS['pump_power_kw'][1])
-    toolbox.register("attr_turbine", random.uniform, BOUNDS['turbine_power_kw'][0], BOUNDS['turbine_power_kw'][1])
+    # Use bounds from user input
+    toolbox.register("attr_volume", random.uniform, 
+                     bounds['volume_m3'][0], bounds['volume_m3'][1])
+    toolbox.register("attr_head", random.uniform, 
+                     bounds['head_m'][0], bounds['head_m'][1])
+    toolbox.register("attr_pipe", random.uniform, 
+                     bounds['pipe_diameter_m'][0], bounds['pipe_diameter_m'][1])
+    toolbox.register("attr_pump", random.uniform, 
+                     bounds['pump_power_kw'][0], bounds['pump_power_kw'][1])
+    toolbox.register("attr_turbine", random.uniform, 
+                     bounds['turbine_power_kw'][0], bounds['turbine_power_kw'][1])
     
     toolbox.register("individual", tools.initCycle, creator.Individual,
                      (toolbox.attr_volume, toolbox.attr_head, toolbox.attr_pipe,
@@ -161,21 +167,21 @@ def setup_deap():
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
     
     toolbox.register("mate", tools.cxSimulatedBinaryBounded,
-                     low=[BOUNDS['volume_m3'][0], BOUNDS['head_m'][0], 
-                          BOUNDS['pipe_diameter_m'][0], BOUNDS['pump_power_kw'][0],
-                          BOUNDS['turbine_power_kw'][0]],
-                     up=[BOUNDS['volume_m3'][1], BOUNDS['head_m'][1], 
-                         BOUNDS['pipe_diameter_m'][1], BOUNDS['pump_power_kw'][1],
-                         BOUNDS['turbine_power_kw'][1]],
+                     low=[bounds['volume_m3'][0], bounds['head_m'][0], 
+                          bounds['pipe_diameter_m'][0], bounds['pump_power_kw'][0],
+                          bounds['turbine_power_kw'][0]],
+                     up=[bounds['volume_m3'][1], bounds['head_m'][1], 
+                         bounds['pipe_diameter_m'][1], bounds['pump_power_kw'][1],
+                         bounds['turbine_power_kw'][1]],
                      eta=20.0)
     
     toolbox.register("mutate", tools.mutPolynomialBounded,
-                     low=[BOUNDS['volume_m3'][0], BOUNDS['head_m'][0], 
-                          BOUNDS['pipe_diameter_m'][0], BOUNDS['pump_power_kw'][0],
-                          BOUNDS['turbine_power_kw'][0]],
-                     up=[BOUNDS['volume_m3'][1], BOUNDS['head_m'][1], 
-                         BOUNDS['pipe_diameter_m'][1], BOUNDS['pump_power_kw'][1],
-                         BOUNDS['turbine_power_kw'][1]],
+                     low=[bounds['volume_m3'][0], bounds['head_m'][0], 
+                          bounds['pipe_diameter_m'][0], bounds['pump_power_kw'][0],
+                          bounds['turbine_power_kw'][0]],
+                     up=[bounds['volume_m3'][1], bounds['head_m'][1], 
+                         bounds['pipe_diameter_m'][1], bounds['pump_power_kw'][1],
+                         bounds['turbine_power_kw'][1]],
                      eta=20.0, indpb=0.1)
     
     toolbox.register("select", tools.selNSGA2)
@@ -204,9 +210,10 @@ def run_optimization(user=None):
     print(f"Reservoir Type: {CURRENT_USER.upper_reservoir_type}")
     print(f"PV Capacity: {CURRENT_USER.pv_kwp} kWp")
     print(f"Autonomy: >= {CURRENT_USER.autonomy_days} days")
+    print(f"Max Volume: {CURRENT_USER.max_volume_m3} m³")
     print("=" * 70)
     
-    toolbox = setup_deap()
+    toolbox = setup_deap(user=CURRENT_USER)
     population = toolbox.population(n=POPULATION_SIZE)
     
     stats = tools.Statistics(lambda ind: ind.fitness.values)
