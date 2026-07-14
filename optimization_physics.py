@@ -35,6 +35,7 @@ DEFAULT_USER.demand_spike_factor = 1.0
 DEFAULT_USER.has_grid_backup = False
 DEFAULT_USER.pipe_roughness_m = 0.00015
 DEFAULT_USER.max_volume_m3 = 800  # Default matches current bound 800
+DEFAULT_USER.budget_lkr = None
 
 CURRENT_USER = DEFAULT_USER
 
@@ -102,6 +103,9 @@ def evaluate(individual):
         return [1000.0, 100000000.0]
 
     if autonomy < user.autonomy_days:
+        return [1000.0, 100000000.0]
+    
+    if user.budget_lkr is not None and cost > user.budget_lkr:
         return [1000.0, 100000000.0]
 
     return [-efficiency, cost]

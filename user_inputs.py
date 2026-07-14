@@ -25,7 +25,7 @@ class UserInputs:
         
         # Requirements
         self.autonomy_days = 2.0
-        self.budget_lkr = None  # None = no budget constraint
+        self.budget_lkr = 2000000  # None = no budget constraint
         self.max_volume_m3 = 800  # Default matches current bound 800
         
         # Advanced

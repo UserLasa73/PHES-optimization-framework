@@ -33,9 +33,9 @@ DEFAULT_USER.evaporation_rate_mm_month = 50.0
 DEFAULT_USER.demand_spike_factor = 1.0
 DEFAULT_USER.has_grid_backup = False
 DEFAULT_USER.pipe_roughness_m = 0.00015
-
 # NEW: User volume constraint (only max needed)
 DEFAULT_USER.max_volume_m3 = 800  # Default matches original hard-coded bound
+DEFAULT_USER.budget_lkr = None
 
 CURRENT_USER = DEFAULT_USER
 
@@ -116,7 +116,9 @@ def evaluate(individual):
     if autonomy < user.autonomy_days:
         return [1000.0, 100000000.0]
     
-    
+    if user.budget_lkr is not None and cost > user.budget_lkr:
+        return [1000.0, 100000000.0]  # Reject only if budget is set
+
     return [-efficiency, cost]
 
 
