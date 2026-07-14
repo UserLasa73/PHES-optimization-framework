@@ -304,4 +304,13 @@ if st.sidebar.button(" Optimize Design", type="primary"):
             st.download_button("📥 Download Results (CSV)", csv, "phos_designs.csv")
             
         else:
-            st.error(" No valid designs found. Try relaxing constraints or increasing bounds.")
+            st.error("No valid designs found.")
+            st.info("""
+            **To find a valid design, try adjusting these inputs:**
+            - Increase **Head Height** (more pressure = better efficiency)
+            - Increase **Volume** (more storage = longer autonomy)
+            - Reduce **Autonomy** (shorter backup time requirement)
+            - Increase **PV Capacity** (more excess power to pump)
+            - Change **Reservoir Type** (excavated/pond are cheaper)
+            - Increase **Maximum Volume** (if you set a limit)
+            """)

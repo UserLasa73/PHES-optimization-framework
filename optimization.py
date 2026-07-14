@@ -109,25 +109,15 @@ def evaluate(individual):
     )
     cost = cost_dict['total_lkr']
     
-    # ===== SOFT CONSTRAINTS (PENALTY, NOT REJECTION) =====
-    penalty = 0.0
+    # ===== HARD CONSTRAINTS =====
+    if efficiency < 70.0:
+        return [1000.0, 100000000.0]
     
-    # Penalty for low efficiency
-    if efficiency < 80.0:
-        penalty += (80.0 - efficiency) * 1000
-    
-    # Penalty for low autonomy
     if autonomy < user.autonomy_days:
-        penalty += (user.autonomy_days - autonomy) * 100000
+        return [1000.0, 100000000.0]
     
-    # NEW: Penalty for exceeding max volume
-    if individual[0] > user.max_volume_m3:
-        penalty += (individual[0] - user.max_volume_m3) * 100000
     
-    # ===== OBJECTIVE WITH PENALTY =====
-    adjusted_cost = cost + penalty
-    
-    return [-efficiency, adjusted_cost]
+    return [-efficiency, cost]
 
 
 # ============================================================================
