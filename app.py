@@ -59,6 +59,7 @@ pv_kwp = st.sidebar.number_input("PV Capacity (kWp)", value=10.0, min_value=5.0,
 daily_load = st.sidebar.number_input("Daily Load (kWh/day)", value=20.0, min_value=10.0, max_value=200.0, step=5.0)
 autonomy_days = st.sidebar.number_input("Autonomy (days)", value=2.0, min_value=0.0, max_value=5.0, step=0.5)
 reservoir_type = st.sidebar.selectbox("Reservoir Type", ["new_tank", "excavated", "pond", "river"], index=0)
+
 # Reservoir Volume Constraint
 st.sidebar.subheader("Reservoir Volume Constraint")
 max_volume_m3 = st.sidebar.number_input(
@@ -68,6 +69,19 @@ max_volume_m3 = st.sidebar.number_input(
     step=10,
     help="Designs with volume exceeding this will be penalized"
 )
+
+enable_budget = st.sidebar.checkbox("Set Budget Limit", value=False)
+
+if enable_budget:
+    budget_lkr = st.sidebar.number_input(
+        "Budget (LKR)",
+        value=5000000,
+        min_value=500000,
+        max_value=10000000,
+        step=100000
+    )
+else:
+    budget_lkr = None  # No limit
 
 st.sidebar.divider()
 
@@ -233,6 +247,7 @@ if st.sidebar.button(" Optimize Design", type="primary"):
         user.demand_spike_factor = 1.0
         user.has_grid_backup = False
         user.max_volume_m3= max_volume_m3 
+        user.budget_lkr = budget_lkr
         
         # Run optimization
         # ===== RUN OPTIMIZATION (Choose mode) =====
@@ -258,6 +273,9 @@ if st.sidebar.button(" Optimize Design", type="primary"):
             print(f"Daily Load: {daily_load} kWh/day")
             print(f"Autonomy Required: {autonomy_days} days")
             print(f"Reservoir Type: {reservoir_type}")
+            print(f"Max Volume: {max_volume_m3} m³")
+            print(f"Budget: {budget_lkr if budget_lkr is not None else 'No limit'}")
+            print(f"Efficiency Constraint: 70%")
             print("-" * 70)
             
             best = df.iloc[0]
