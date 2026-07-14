@@ -97,24 +97,14 @@ def evaluate(individual):
     efficiency = metrics['efficiency_percent']
     autonomy = metrics['autonomy_days']
     
-    # ===== SOFT CONSTRAINTS (PENALTIES) =====
-    penalty = 0.0
-    
-    # Penalty for low efficiency
-    if efficiency < 80.0:
-        penalty += (80.0 - efficiency) * 1000
-    
-    # Penalty for low autonomy
+    # ===== HARD CONSTRAINTS =====
+    if efficiency < 70.0:
+        return [1000.0, 100000000.0]
+
     if autonomy < user.autonomy_days:
-        penalty += (user.autonomy_days - autonomy) * 100000
-    
-    #Penalty for exceeding max volume
-    if individual[0] > user.max_volume_m3:
-        penalty += (individual[0] - user.max_volume_m3) * 100000
-    
-    adjusted_cost = cost + penalty
-    
-    return [-efficiency, adjusted_cost]
+        return [1000.0, 100000000.0]
+
+    return [-efficiency, cost]
 
 
 # ============================================================================
