@@ -11,21 +11,21 @@ from solar_data_loader import fetch_solar_data, fetch_load_data
 user = UserInputs()
 user.latitude = 8.9
 user.longitude = 79.9
-user.pv_kwp = 10.0
+user.pv_kwp = 20.0
 user.daily_energy_kwh = 20.0
 user.upper_reservoir_type = "new_tank"
 user.lower_reservoir_type = "new_tank"
 user.evaporation_rate_mm_month = 50.0
 user.pipe_roughness_m = 0.00015
-user.autonomy_days = 2.0
+user.autonomy_days = 0.5
 
 # ===== DESIGN THAT GAVE 100% EFFICIENCY =====
 design = {
-    'volume_m3': 500,
-    'head_m': 44.3,
-    'pipe_diameter_m': 0.276,
-    'pump_power_kw': 2.6,
-    'turbine_power_kw': 11.0
+    'volume_m3': 800,
+    'head_m': 44.7,
+    'pipe_diameter_m': 0.303,
+    'pump_power_kw': 3.4,
+    'turbine_power_kw': 9.1
 }
 
 print("=" * 70)
