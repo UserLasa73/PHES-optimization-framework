@@ -34,17 +34,23 @@ DEFAULT_USER.evaporation_rate_mm_month = 50.0
 DEFAULT_USER.demand_spike_factor = 1.0
 DEFAULT_USER.has_grid_backup = False
 DEFAULT_USER.pipe_roughness_m = 0.00015
+DEFAULT_USER.max_volume_m3 = 800  # Default matches current bound 800
 
 CURRENT_USER = DEFAULT_USER
 
 # ===== BOUNDS =====
-BOUNDS = {
-    'volume_m3': (20, 300),
-    'head_m': (5, 30),
-    'pipe_diameter_m': (0.05, 0.25),
-    'pump_power_kw': (2, 30),
-    'turbine_power_kw': (2, 25)
-}
+def get_bounds(user=None):
+    if user is None:
+        user = CURRENT_USER
+    
+    bounds = {
+        'volume_m3': (20, user.max_volume_m3),
+        'head_m': (5, 45),
+        'pipe_diameter_m': (0.05, 0.35),
+        'pump_power_kw': (2, 30),
+        'turbine_power_kw': (2, 25)
+    }
+    return bounds
 
 POPULATION_SIZE = 100
 N_GENERATIONS = 50
@@ -102,10 +108,9 @@ def evaluate(individual):
     if autonomy < user.autonomy_days:
         penalty += (user.autonomy_days - autonomy) * 100000
     
-    # ===== PUMP/TURBINE RATIO CONSTRAINT =====
-    pump_turbine_ratio = individual[3] / individual[4] if individual[4] > 0 else 100
-    if pump_turbine_ratio > 4.0 or pump_turbine_ratio < 0.25:
-        penalty += 100000
+    #Penalty for exceeding max volume
+    if individual[0] > user.max_volume_m3:
+        penalty += (individual[0] - user.max_volume_m3) * 100000
     
     adjusted_cost = cost + penalty
     
@@ -116,17 +121,22 @@ def evaluate(individual):
 # SETUP DEAP
 # ============================================================================
 
-def setup_deap():
+def setup_deap(user=None):
+    if user is None:
+        user = CURRENT_USER
+    
+    bounds = get_bounds(user)
+    
     creator.create("FitnessMin", base.Fitness, weights=(-1.0, 1.0))
     creator.create("Individual", list, fitness=creator.FitnessMin)
     
     toolbox = base.Toolbox()
     
-    toolbox.register("attr_volume", random.uniform, BOUNDS['volume_m3'][0], BOUNDS['volume_m3'][1])
-    toolbox.register("attr_head", random.uniform, BOUNDS['head_m'][0], BOUNDS['head_m'][1])
-    toolbox.register("attr_pipe", random.uniform, BOUNDS['pipe_diameter_m'][0], BOUNDS['pipe_diameter_m'][1])
-    toolbox.register("attr_pump", random.uniform, BOUNDS['pump_power_kw'][0], BOUNDS['pump_power_kw'][1])
-    toolbox.register("attr_turbine", random.uniform, BOUNDS['turbine_power_kw'][0], BOUNDS['turbine_power_kw'][1])
+    toolbox.register("attr_volume", random.uniform, bounds['volume_m3'][0], bounds['volume_m3'][1])
+    toolbox.register("attr_head", random.uniform, bounds['head_m'][0], bounds['head_m'][1])
+    toolbox.register("attr_pipe", random.uniform, bounds['pipe_diameter_m'][0], bounds['pipe_diameter_m'][1])
+    toolbox.register("attr_pump", random.uniform, bounds['pump_power_kw'][0], bounds['pump_power_kw'][1])
+    toolbox.register("attr_turbine", random.uniform, bounds['turbine_power_kw'][0], bounds['turbine_power_kw'][1])
     
     toolbox.register("individual", tools.initCycle, creator.Individual,
                      (toolbox.attr_volume, toolbox.attr_head, toolbox.attr_pipe,
@@ -135,21 +145,21 @@ def setup_deap():
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
     
     toolbox.register("mate", tools.cxSimulatedBinaryBounded,
-                     low=[BOUNDS['volume_m3'][0], BOUNDS['head_m'][0], 
-                          BOUNDS['pipe_diameter_m'][0], BOUNDS['pump_power_kw'][0],
-                          BOUNDS['turbine_power_kw'][0]],
-                     up=[BOUNDS['volume_m3'][1], BOUNDS['head_m'][1], 
-                         BOUNDS['pipe_diameter_m'][1], BOUNDS['pump_power_kw'][1],
-                         BOUNDS['turbine_power_kw'][1]],
+                     low=[bounds['volume_m3'][0], bounds['head_m'][0], 
+                          bounds['pipe_diameter_m'][0], bounds['pump_power_kw'][0],
+                          bounds['turbine_power_kw'][0]],
+                     up=[bounds['volume_m3'][1], bounds['head_m'][1], 
+                         bounds['pipe_diameter_m'][1], bounds['pump_power_kw'][1],
+                         bounds['turbine_power_kw'][1]],
                      eta=20.0)
     
     toolbox.register("mutate", tools.mutPolynomialBounded,
-                     low=[BOUNDS['volume_m3'][0], BOUNDS['head_m'][0], 
-                          BOUNDS['pipe_diameter_m'][0], BOUNDS['pump_power_kw'][0],
-                          BOUNDS['turbine_power_kw'][0]],
-                     up=[BOUNDS['volume_m3'][1], BOUNDS['head_m'][1], 
-                         BOUNDS['pipe_diameter_m'][1], BOUNDS['pump_power_kw'][1],
-                         BOUNDS['turbine_power_kw'][1]],
+                     low=[bounds['volume_m3'][0], bounds['head_m'][0], 
+                          bounds['pipe_diameter_m'][0], bounds['pump_power_kw'][0],
+                          bounds['turbine_power_kw'][0]],
+                     up=[bounds['volume_m3'][1], bounds['head_m'][1], 
+                         bounds['pipe_diameter_m'][1], bounds['pump_power_kw'][1],
+                         bounds['turbine_power_kw'][1]],
                      eta=20.0, indpb=0.1)
     
     toolbox.register("select", tools.selNSGA2)
@@ -178,13 +188,14 @@ def run_optimization_physics(user=None):
     print(f"Reservoir Type: {CURRENT_USER.upper_reservoir_type}")
     print(f"PV Capacity: {CURRENT_USER.pv_kwp} kWp")
     print(f"Autonomy: >= {CURRENT_USER.autonomy_days} days")
+    print(f"Max Volume: {CURRENT_USER.max_volume_m3} m3")  # Add this line
     print("=" * 70)
-    print("⚠️  WARNING: Physics simulator mode is SLOW.")
+    print("  WARNING: Physics simulator mode is SLOW.")
     print(f"   {POPULATION_SIZE * N_GENERATIONS} evaluations")
     print(f"   Estimated time: ~{(POPULATION_SIZE * N_GENERATIONS * 0.5) / 60:.0f} minutes")
     print("=" * 70)
     
-    toolbox = setup_deap()
+    toolbox = setup_deap(user=CURRENT_USER)  # Pass user here
     population = toolbox.population(n=POPULATION_SIZE)
     
     stats = tools.Statistics(lambda ind: ind.fitness.values)
