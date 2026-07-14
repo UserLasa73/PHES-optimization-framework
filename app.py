@@ -295,12 +295,6 @@ if st.sidebar.button(" Optimize Design", type="primary"):
             col3.metric("Volume", f"{best['volume_m3']:.0f} m³")
             col4.metric("Head", f"{best['head_m']:.1f} m")
             
-            # Pareto front plot
-            fig = px.scatter(df, x='cost', y='efficiency', 
-                             title='Pareto Front: Efficiency vs Cost',
-                             labels={'cost': 'Cost (LKR)', 'efficiency': 'Efficiency (%)'},
-                             hover_data=['volume_m3', 'head_m', 'pipe_diameter_m'])
-            st.plotly_chart(fig, use_container_width=True)
             
             # Shopping list
             display_shopping_list(best, user)
