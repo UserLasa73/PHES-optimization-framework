@@ -17,12 +17,12 @@ def calculate_capital_cost(volume_m3, head_m, pipe_diameter_m,
     
     if volume_m3 <= 100:
         cost_per_m3 = 8000
+    elif volume_m3 <= 300:
+        cost_per_m3 = 6500    # ← Cheaper
     elif volume_m3 <= 500:
-        cost_per_m3 = 5000
-    elif volume_m3 <= 2000:
-        cost_per_m3 = 3500
+        cost_per_m3 = 5500    # ← Cheaper
     else:
-        cost_per_m3 = 2500
+        cost_per_m3 = 4500
     
     cost_factors = {
         "new_tank": 1.0,
