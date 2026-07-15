@@ -184,56 +184,81 @@ The application will generate:
 
 ---
 
-# 📊 Example Result
+# 📊 Comparison Test
 
-**Sample Input**
+The following test compares the **ML Surrogate** and the **Physics Simulator** using the same design constraints.
+
+### Test Configuration
 
 | Parameter | Value |
 |-----------|------:|
 | Location | Vavuniya |
-| PV Capacity | 20 kWp |
-| Daily Load | 20 kWh/day |
-| Autonomy | 0.5 days |
+| PV Capacity | 20.0 kWp |
+| Daily Load | 20.0 kWh/day |
+| Required Autonomy | 0.5 days |
 | Reservoir Type | new_tank |
-| Max Volume | 800 m³ |
+| Maximum Reservoir Volume | 800 m³ |
 | Budget | LKR 4,000,000 |
-| Minimum Efficiency | 70% |
+| Efficiency Constraint | 70% |
 
 ---
 
-### Optimal Design
+## ⚡ ML Surrogate (Fast)
 
 ```text
-======================================================================
-OPTIMAL DESIGN
-======================================================================
-
-Mode                : ML Surrogate (Fast)
-Location            : Vavuniya
-PV Capacity         : 20.0 kWp
-Daily Load          : 20.0 kWh/day
-Autonomy            : 0.5 days
-Reservoir Type      : new_tank
-Maximum Volume      : 800 m³
-Budget              : LKR 4,000,000
-Efficiency Target   : 70%
-
-----------------------------------------------------------------------
 BEST DESIGN
 
-Reservoir Volume    : 423 m³
-Head Height         : 41.4 m
-Pipe Diameter       : 0.259 m
-Pump Power          : 5.3 kW
-Turbine Power       : 8.2 kW
+Reservoir Volume : 491 m³
+Head Height      : 44.6 m
+Pipe Diameter    : 0.272 m
+Pump Power       : 4.6 kW
+Turbine Power    : 10.0 kW
 
-Round-trip Efficiency : 76.5%
-Estimated Cost        : LKR 3,480,316
-
-======================================================================
+Round-trip Efficiency : 77.7%
+Estimated Cost        : LKR 3,991,539
 ```
 
-Optimization completed in **under 10 seconds** using the **ML Surrogate** mode.
+**Optimization Time:** **< 10 seconds**
+
+---
+
+## 🔬 Physics Simulator (Slow)
+
+```text
+BEST DESIGN
+
+Reservoir Volume : 636 m³
+Head Height      : 37.2 m
+Pipe Diameter    : 0.349 m
+Pump Power       : 2.0 kW
+Turbine Power    : 6.4 kW
+
+Round-trip Efficiency : 76.8%
+Estimated Cost        : LKR 3,998,089
+```
+
+**Optimization Time:** Approximately **10 minutes**
+
+---
+
+## 📈 Comparison Summary
+
+| Metric | ML Surrogate | Physics Simulator |
+|-------|-------------:|------------------:|
+| Reservoir Volume | 491 m³ | 636 m³ |
+| Head Height | 44.6 m | 37.2 m |
+| Pipe Diameter | 0.272 m | 0.349 m |
+| Pump Power | 4.6 kW | 2.0 kW |
+| Turbine Power | 10.0 kW | 6.4 kW |
+| Round-trip Efficiency | **77.7%** | **76.8%** |
+| Estimated Cost | LKR 3,991,539 | LKR 3,998,089 |
+| Optimization Time | **< 10 s** | **≈ 40 min** |
+
+---
+
+### Conclusion
+
+The **ML Surrogate** produced a design with **comparable efficiency (77.7% vs. 76.8%)** and a **similar estimated cost** to the full **Physics Simulator**, while reducing optimization time from **approximately 40 minutes to under 10 seconds**. This demonstrates that the XGBoost surrogate model provides a fast and practical alternative for real-time PHES design optimization with minimal compromise in solution quality.
 
 ---
 
