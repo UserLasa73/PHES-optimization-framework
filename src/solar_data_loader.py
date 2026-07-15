@@ -11,6 +11,8 @@ from pvlib.location import Location
 from pvlib.pvsystem import PVSystem, FixedMount
 from pvlib.modelchain import ModelChain
 
+from src.user_inputs import UserInputs
+
 
 def fetch_solar_data(user):
     """Fetch solar data with tilt/azimuth correction."""

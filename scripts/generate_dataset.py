@@ -11,9 +11,9 @@ import time
 import warnings
 warnings.filterwarnings('ignore')
 
-from user_inputs import UserInputs
-from simulator import PumpedHydroSimulator
-from solar_data_loader import fetch_solar_data, fetch_load_data
+from src.user_inputs import UserInputs
+from src.simulator import PumpedHydroSimulator
+from src.solar_data_loader import fetch_solar_data, fetch_load_data
 
 
 # ============================================================================

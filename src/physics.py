@@ -5,7 +5,7 @@ All formulas used by the simulator.
 """
 
 import math
-from constants import *
+from src.constants import *
 
 # ============================================================================
 # PUMP AND TURBINE CALCULATIONS

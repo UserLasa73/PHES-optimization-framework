@@ -9,8 +9,11 @@ import numpy as np
 import joblib
 import plotly.express as px
 
-from user_inputs import UserInputs
-from cost_model import calculate_capital_cost
+
+from src.user_inputs import UserInputs
+from src.cost_model import calculate_capital_cost
+from optimization.optimization import run_optimization, extract_pareto_front
+from optimization.optimization_physics import run_optimization_physics, extract_pareto_front_physics
 
 st.set_page_config(page_title="PHES Optimizer", layout="wide")
 
@@ -55,9 +58,9 @@ st.sidebar.divider()
 
 st.sidebar.header(" System Parameters")
 
-pv_kwp = st.sidebar.number_input("PV Capacity (kWp)", value=10.0, min_value=5.0, max_value=100.0, step=1.0)
+pv_kwp = st.sidebar.number_input("PV Capacity (kWp)", value=20.0, min_value=5.0, max_value=100.0, step=1.0)
 daily_load = st.sidebar.number_input("Daily Load (kWh/day)", value=20.0, min_value=10.0, max_value=200.0, step=5.0)
-autonomy_days = st.sidebar.number_input("Autonomy (days)", value=2.0, min_value=0.0, max_value=5.0, step=0.5)
+autonomy_days = st.sidebar.number_input("Autonomy (days)", value=1.0, min_value=0.0, max_value=5.0, step=0.5)
 reservoir_type = st.sidebar.selectbox("Reservoir Type", ["new_tank", "excavated", "pond", "river"], index=0)
 
 # Reservoir Volume Constraint
@@ -252,11 +255,9 @@ if st.sidebar.button(" Optimize Design", type="primary"):
         # Run optimization
         # ===== RUN OPTIMIZATION (Choose mode) =====
         if optimization_mode == "ML Surrogate (Fast)":
-            from optimization import run_optimization, extract_pareto_front
             population = run_optimization(user)
             pareto_front = extract_pareto_front(population)
         else:
-            from optimization_physics import run_optimization_physics, extract_pareto_front_physics
             population = run_optimization_physics(user)
             pareto_front = extract_pareto_front_physics(population)
         
@@ -325,7 +326,6 @@ if st.sidebar.button(" Optimize Design", type="primary"):
             st.error("No valid designs found.")
             st.info("""
             **To find a valid design, try adjusting these inputs:**
-            - Increase **Head Height** (more pressure = better efficiency)
             - Increase **Volume** (more storage = longer autonomy)
             - Reduce **Autonomy** (shorter backup time requirement)
             - Increase **PV Capacity** (more excess power to pump)

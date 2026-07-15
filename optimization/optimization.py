@@ -11,8 +11,8 @@ from deap import base, creator, tools, algorithms
 import warnings
 warnings.filterwarnings('ignore')
 
-from user_inputs import UserInputs
-from cost_model import calculate_capital_cost
+from src.user_inputs import UserInputs
+from src.cost_model import calculate_capital_cost
 
 
 # ============================================================================

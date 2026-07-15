@@ -3,7 +3,9 @@ test_optimizer.py
 Test the optimizer with specific user inputs.
 """
 
-from user_inputs import UserInputs
+from src.user_inputs import UserInputs
+from src.simulator import PumpedHydroSimulator
+from src.solar_data_loader import fetch_solar_data, fetch_load_data
 from optimization import run_optimization, extract_pareto_front
 
 print("=" * 70)
