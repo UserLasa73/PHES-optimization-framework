@@ -49,16 +49,13 @@ An interactive optimization framework for designing **small-scale, solar-integra
 ---
 ## 📸 Application Preview
 
-![Home Page](screenshots/interface-1.png)
-
+![Streamlit-interface](screenshots/interface-1.png)
 ---
 
-![Optimization Results](screenshots/interface-2.png)
-
+![Streamlit-interface](screenshots/interface-2.png)
 ---
 
-![Shopping List](screenshots/interface-2.png)
-
+![Streamlit-interface](screenshots/interface-2.png)
 ---
 
 # 📁 Project Structure
