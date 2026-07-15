@@ -1,4 +1,3 @@
-````markdown
 # ⚡ Solar-Pumped Hydro Energy Storage (PHES) Optimizer
 
 An interactive optimization framework for designing **small-scale, solar-integrated Pumped Hydro Energy Storage (PHES)** systems. The framework combines a detailed **physics-based simulator** with an **XGBoost machine learning surrogate model** to rapidly identify cost-effective and energy-efficient PHES designs for homes, farms, rural communities, and islands.
