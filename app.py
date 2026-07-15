@@ -319,7 +319,58 @@ if st.sidebar.button(" Optimize Design", type="primary"):
             display_shopping_list(best, user)
         
             # Download
-            csv = df.to_csv(index=False)
+            # ===== CREATE ENHANCED CSV WITH SHOPPING LIST =====
+            # Start with the Pareto front DataFrame
+            df_export = df.copy()
+
+            # Add user inputs to EVERY row
+            df_export['location'] = selected_location
+            df_export['pv_kwp'] = pv_kwp
+            df_export['daily_load_kwh'] = daily_load
+            df_export['autonomy_required_days'] = autonomy_days
+            df_export['reservoir_type'] = reservoir_type
+            df_export['max_volume_m3'] = max_volume_m3
+            df_export['budget_lkr'] = budget_lkr if budget_lkr is not None else 'No limit'
+
+            # Add shopping list breakdown for each design
+            shopping_breakdown = []
+            for _, row in df.iterrows():
+                cost_dict = calculate_capital_cost(
+                    row['volume_m3'],
+                    row['head_m'],
+                    row['pipe_diameter_m'],
+                    row['pump_power_kw'],
+                    row['turbine_power_kw'],
+                    user.pv_kwp,
+                    user.upper_reservoir_type,
+                    user.lower_reservoir_type
+                )
+                breakdown = cost_dict['breakdown']
+                shopping_breakdown.append({
+                    'reservoir_cost_lkr': breakdown['reservoir_lkr'],
+                    'pump_cost_lkr': breakdown['pump_lkr'],
+                    'turbine_cost_lkr': breakdown['turbine_lkr'],
+                    'pipe_cost_lkr': breakdown['pipe_lkr'],
+                    'bos_cost_lkr': breakdown['bos_lkr'],
+                    'installation_cost_lkr': breakdown['installation_lkr']
+                })
+
+            shopping_df = pd.DataFrame(shopping_breakdown)
+            df_export = pd.concat([df_export, shopping_df], axis=1)
+
+            # Reorder columns for readability
+            column_order = [
+                'location', 'pv_kwp', 'daily_load_kwh', 'autonomy_required_days',
+                'reservoir_type', 'max_volume_m3', 'budget_lkr',
+                'volume_m3', 'head_m', 'pipe_diameter_m', 'pump_power_kw', 'turbine_power_kw',
+                'efficiency', 'cost',
+                'reservoir_cost_lkr', 'pump_cost_lkr', 'turbine_cost_lkr',
+                'pipe_cost_lkr', 'bos_cost_lkr', 'installation_cost_lkr'
+            ]
+            df_export = df_export[column_order]
+
+            # Download
+            csv = df_export.to_csv(index=False)
             st.download_button("📥 Download Results (CSV)", csv, "phos_designs.csv")
             
         else:
