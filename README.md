@@ -270,7 +270,6 @@ To generate a new dataset:
 python scripts/generate_dataset.py
 ```
 
-> Approximate runtime: **30–60 minutes**
 
 Train the XGBoost surrogate model:
 
