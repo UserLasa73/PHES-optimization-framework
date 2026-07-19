@@ -1,0 +1,13 @@
+feature,importance
+pipe_diameter_m,0.6133014
+volume_m3,0.20141989
+head_m,0.096589245
+daily_energy_kwh,0.034296893
+pv_kwp,0.017732788
+pump_power_kw,0.0129702315
+reservoir_type_code,0.0085261585
+latitude,0.0049735187
+evaporation_rate_mm_month,0.004275743
+turbine_power_kw,0.0041699223
+longitude,0.001744175
+annual_solar_yield_kwh_per_kwp,0.0

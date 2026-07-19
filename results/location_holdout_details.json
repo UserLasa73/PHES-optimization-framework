@@ -1,0 +1,201 @@
+{
+  "validation_design": "Each location is held out once. Hyperparameters are tuned only on the other locations using grouped cross-validation.",
+  "features": [
+    "volume_m3",
+    "head_m",
+    "pipe_diameter_m",
+    "pump_power_kw",
+    "turbine_power_kw",
+    "pv_kwp",
+    "daily_energy_kwh",
+    "evaporation_rate_mm_month",
+    "reservoir_type_code",
+    "latitude",
+    "longitude",
+    "annual_solar_yield_kwh_per_kwp"
+  ],
+  "folds": {
+    "Colombo": {
+      "training_locations": [
+        "Jaffna",
+        "Vavuniya"
+      ],
+      "training_rows": 2000,
+      "test_rows": 1000,
+      "targets": {
+        "efficiency": {
+          "group_cv_r2": 0.9605371119019002,
+          "holdout_metrics": {
+            "r2": 0.9753587682225078,
+            "mae": 0.5764224474032583,
+            "rmse": 1.5365322405160124
+          },
+          "best_parameters": {
+            "subsample": 0.7,
+            "reg_lambda": 1.0,
+            "reg_alpha": 0.01,
+            "n_estimators": 500,
+            "min_child_weight": 3,
+            "max_depth": 6,
+            "learning_rate": 0.03,
+            "colsample_bytree": 1.0
+          }
+        },
+        "autonomy": {
+          "group_cv_r2": 0.9827558605844066,
+          "holdout_metrics": {
+            "r2": 0.9893114121365059,
+            "mae": 0.016014153388506522,
+            "rmse": 0.03135089091100038
+          },
+          "best_parameters": {
+            "subsample": 0.8,
+            "reg_lambda": 1.0,
+            "reg_alpha": 0.0,
+            "n_estimators": 200,
+            "min_child_weight": 3,
+            "max_depth": 4,
+            "learning_rate": 0.05,
+            "colsample_bytree": 1.0
+          }
+        }
+      }
+    },
+    "Jaffna": {
+      "training_locations": [
+        "Colombo",
+        "Vavuniya"
+      ],
+      "training_rows": 2000,
+      "test_rows": 1000,
+      "targets": {
+        "efficiency": {
+          "group_cv_r2": 0.9615362790597715,
+          "holdout_metrics": {
+            "r2": 0.9774036998581329,
+            "mae": 0.5439346265603323,
+            "rmse": 1.4313184203214464
+          },
+          "best_parameters": {
+            "subsample": 0.7,
+            "reg_lambda": 1.0,
+            "reg_alpha": 0.01,
+            "n_estimators": 500,
+            "min_child_weight": 3,
+            "max_depth": 6,
+            "learning_rate": 0.03,
+            "colsample_bytree": 1.0
+          }
+        },
+        "autonomy": {
+          "group_cv_r2": 0.975262485000016,
+          "holdout_metrics": {
+            "r2": 0.9911264592745689,
+            "mae": 0.013311288244927603,
+            "rmse": 0.03021308241833612
+          },
+          "best_parameters": {
+            "subsample": 0.7,
+            "reg_lambda": 1.0,
+            "reg_alpha": 0.01,
+            "n_estimators": 500,
+            "min_child_weight": 3,
+            "max_depth": 6,
+            "learning_rate": 0.03,
+            "colsample_bytree": 1.0
+          }
+        }
+      }
+    },
+    "Vavuniya": {
+      "training_locations": [
+        "Colombo",
+        "Jaffna"
+      ],
+      "training_rows": 2000,
+      "test_rows": 1000,
+      "targets": {
+        "efficiency": {
+          "group_cv_r2": 0.964486529668132,
+          "holdout_metrics": {
+            "r2": 0.9708240393834777,
+            "mae": 0.6687367614740632,
+            "rmse": 1.782732258582132
+          },
+          "best_parameters": {
+            "subsample": 0.7,
+            "reg_lambda": 1.0,
+            "reg_alpha": 0.01,
+            "n_estimators": 500,
+            "min_child_weight": 3,
+            "max_depth": 6,
+            "learning_rate": 0.03,
+            "colsample_bytree": 1.0
+          }
+        },
+        "autonomy": {
+          "group_cv_r2": 0.982873781626751,
+          "holdout_metrics": {
+            "r2": 0.9853016721082724,
+            "mae": 0.017288439968170182,
+            "rmse": 0.04182916921883114
+          },
+          "best_parameters": {
+            "subsample": 0.8,
+            "reg_lambda": 1.0,
+            "reg_alpha": 0.0,
+            "n_estimators": 200,
+            "min_child_weight": 3,
+            "max_depth": 4,
+            "learning_rate": 0.05,
+            "colsample_bytree": 1.0
+          }
+        }
+      }
+    }
+  },
+  "summary": {
+    "macro_mean": {
+      "held_out_location": "MACRO_MEAN",
+      "training_locations": "",
+      "training_rows": 2000,
+      "test_rows": 1000,
+      "efficiency_group_cv_r2": 0.9621866402099345,
+      "efficiency_r2": 0.9745288358213728,
+      "efficiency_mae": 0.5963646118125513,
+      "efficiency_rmse": 1.5835276398065303,
+      "autonomy_group_cv_r2": 0.9802973757370578,
+      "autonomy_r2": 0.9885798478397824,
+      "autonomy_mae": 0.0155379605338681,
+      "autonomy_rmse": 0.034464380849389215
+    },
+    "macro_std": {
+      "held_out_location": "MACRO_STD",
+      "training_locations": "",
+      "training_rows": "",
+      "test_rows": "",
+      "efficiency_group_cv_r2": 0.002053461076399537,
+      "efficiency_r2": 0.0033674283709197424,
+      "efficiency_mae": 0.0647468969198658,
+      "efficiency_rmse": 0.18035893960692165,
+      "autonomy_group_cv_r2": 0.004360741897145399,
+      "autonomy_r2": 0.0029805076955685917,
+      "autonomy_mae": 0.002030887412814745,
+      "autonomy_rmse": 0.006403415716357563
+    },
+    "pooled": {
+      "held_out_location": "POOLED",
+      "training_locations": "",
+      "training_rows": "",
+      "test_rows": 3000,
+      "efficiency_group_cv_r2": NaN,
+      "efficiency_r2": 0.9743185700181745,
+      "efficiency_mae": 0.5963646118125513,
+      "efficiency_rmse": 1.5903603420070127,
+      "autonomy_group_cv_r2": NaN,
+      "autonomy_r2": 0.9883868097332195,
+      "autonomy_mae": 0.015537960533868102,
+      "autonomy_rmse": 0.034858705788120455
+    }
+  }
+}

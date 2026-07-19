@@ -1,0 +1,67 @@
+{
+  "validation_design": "Hyperparameter tuning on Colombo/Jaffna with grouped CV; Vavuniya held out for unseen-location evaluation; final models retrained on all three locations.",
+  "holdout_location": "Vavuniya",
+  "locations": [
+    "Colombo",
+    "Jaffna",
+    "Vavuniya"
+  ],
+  "training_rows": 2000,
+  "holdout_rows": 1000,
+  "features": [
+    "volume_m3",
+    "head_m",
+    "pipe_diameter_m",
+    "pump_power_kw",
+    "turbine_power_kw",
+    "pv_kwp",
+    "daily_energy_kwh",
+    "evaporation_rate_mm_month",
+    "reservoir_type_code",
+    "latitude",
+    "longitude",
+    "annual_solar_yield_kwh_per_kwp"
+  ],
+  "models": {
+    "efficiency": {
+      "target": "efficiency",
+      "best_group_cv_r2_on_training_locations": 0.964486529668132,
+      "best_parameters": {
+        "subsample": 0.7,
+        "reg_lambda": 1.0,
+        "reg_alpha": 0.01,
+        "n_estimators": 500,
+        "min_child_weight": 3,
+        "max_depth": 6,
+        "learning_rate": 0.03,
+        "colsample_bytree": 1.0
+      },
+      "unseen_location_holdout_metrics": {
+        "r2": 0.9708240393834777,
+        "mae": 0.6687367614740632,
+        "rmse": 1.782732258582132
+      },
+      "deployment_training_rows": 3000
+    },
+    "autonomy": {
+      "target": "autonomy",
+      "best_group_cv_r2_on_training_locations": 0.982873781626751,
+      "best_parameters": {
+        "subsample": 0.8,
+        "reg_lambda": 1.0,
+        "reg_alpha": 0.0,
+        "n_estimators": 200,
+        "min_child_weight": 3,
+        "max_depth": 4,
+        "learning_rate": 0.05,
+        "colsample_bytree": 1.0
+      },
+      "unseen_location_holdout_metrics": {
+        "r2": 0.9853016721082724,
+        "mae": 0.017288439968170182,
+        "rmse": 0.04182916921883114
+      },
+      "deployment_training_rows": 3000
+    }
+  }
+}

@@ -1,4 +1,11 @@
-"""Train and evaluate XGBoost surrogate models without duplicate-row leakage."""
+"""Train and evaluate XGBoost surrogate models for the three-location dataset.
+
+Validation design:
+1. Vavuniya is held out as an unseen location for final evaluation.
+2. Hyperparameters are selected using grouped cross-validation on Colombo and Jaffna.
+3. After reporting holdout metrics, a final deployment model is retrained on all
+   three locations using the selected hyperparameters.
+"""
 
 from __future__ import annotations
 
@@ -21,11 +28,11 @@ RESULT_DIR = ROOT / "results"
 MODEL_DIR.mkdir(exist_ok=True)
 RESULT_DIR.mkdir(exist_ok=True)
 
-HOLDOUT_LOCATION = "Anuradhapura"
+HOLDOUT_LOCATION = "Vavuniya"
 RANDOM_SEED = 42
 
 
-def _metrics(actual, predicted):
+def metrics(actual, predicted):
     return {
         "r2": float(r2_score(actual, predicted)),
         "mae": float(mean_absolute_error(actual, predicted)),
@@ -33,12 +40,13 @@ def _metrics(actual, predicted):
     }
 
 
-def _fit_model(X_train, y_train, groups):
+def tune_model(X_train, y_train, groups):
     estimator = xgb.XGBRegressor(
         objective="reg:squarederror",
         random_state=RANDOM_SEED,
         n_jobs=-1,
     )
+
     distributions = {
         "n_estimators": [100, 200, 300, 500],
         "learning_rate": [0.03, 0.05, 0.10, 0.15],
@@ -49,9 +57,12 @@ def _fit_model(X_train, y_train, groups):
         "reg_alpha": [0.0, 0.01, 0.1],
         "reg_lambda": [1.0, 2.0, 5.0],
     }
-    # Groups are locations. This prevents the same site from appearing in both
-    # training and validation folds during hyperparameter selection.
-    cv = GroupKFold(n_splits=min(5, groups.nunique()))
+
+    unique_groups = int(groups.nunique())
+    if unique_groups < 2:
+        raise ValueError("At least two training locations are required for grouped CV.")
+
+    cv = GroupKFold(n_splits=unique_groups)
     search = RandomizedSearchCV(
         estimator,
         param_distributions=distributions,
@@ -66,90 +77,156 @@ def _fit_model(X_train, y_train, groups):
     return search.best_estimator_, search.best_params_, float(search.best_score_)
 
 
+def final_model(best_params):
+    return xgb.XGBRegressor(
+        objective="reg:squarederror",
+        random_state=RANDOM_SEED,
+        n_jobs=-1,
+        **best_params,
+    )
+
+
 def main():
     if not DATA_PATH.exists():
         raise FileNotFoundError(
-            f"Training dataset not found at {DATA_PATH}. Run "
-            "`python -m scripts.generate_dataset` first."
+            f"Training dataset not found at {DATA_PATH}. "
+            "Run `python -m scripts.generate_dataset` first."
         )
 
     df = pd.read_csv(DATA_PATH)
-    missing = [column for column in SURROGATE_FEATURES if column not in df.columns]
+
+    required = SURROGATE_FEATURES + [
+        "location",
+        "design_id",
+        "efficiency",
+        "autonomy",
+    ]
+    missing = [column for column in required if column not in df.columns]
     if missing:
-        raise ValueError(
-            "Dataset uses the old feature schema. Regenerate it before training. "
-            f"Missing columns: {missing}"
-        )
-    if "location" not in df.columns:
-        raise ValueError("Dataset must retain location for grouped validation.")
+        raise ValueError(f"Dataset is missing required columns: {missing}")
+
+    if df[required].isna().any().any():
+        raise ValueError("Missing values detected in required training columns.")
+
     if df.duplicated(subset=SURROGATE_FEATURES).any():
         raise ValueError(
-            "Duplicate feature vectors detected. This would leak nearly identical "
-            "designs across train/test splits. Regenerate the dataset."
+            "Duplicate feature vectors detected. Regenerate the dataset before training."
+        )
+
+    locations = sorted(df["location"].unique().tolist())
+    if HOLDOUT_LOCATION not in locations:
+        raise ValueError(
+            f"Holdout location {HOLDOUT_LOCATION!r} is unavailable. "
+            f"Dataset locations: {locations}"
         )
 
     train_df = df[df["location"] != HOLDOUT_LOCATION].copy()
     test_df = df[df["location"] == HOLDOUT_LOCATION].copy()
-    if train_df.empty or test_df.empty:
-        raise ValueError(f"Could not create holdout set for {HOLDOUT_LOCATION}.")
+
+    print("=" * 72)
+    print("XGBOOST SURROGATE TRAINING — THREE-LOCATION DATASET")
+    print("=" * 72)
+    print(f"Dataset rows: {len(df)}")
+    print(f"Locations: {locations}")
+    print(f"Training locations: {sorted(train_df['location'].unique().tolist())}")
+    print(f"Unseen holdout location: {HOLDOUT_LOCATION}")
+    print(f"Training rows: {len(train_df)} | Holdout rows: {len(test_df)}")
 
     X_train = train_df[SURROGATE_FEATURES]
     X_test = test_df[SURROGATE_FEATURES]
+    X_all = df[SURROGATE_FEATURES]
     groups = train_df["location"]
 
-    all_results = {
+    results = {
+        "validation_design": (
+            "Hyperparameter tuning on Colombo/Jaffna with grouped CV; "
+            "Vavuniya held out for unseen-location evaluation; final models "
+            "retrained on all three locations."
+        ),
         "holdout_location": HOLDOUT_LOCATION,
+        "locations": locations,
         "training_rows": int(len(train_df)),
-        "test_rows": int(len(test_df)),
+        "holdout_rows": int(len(test_df)),
         "features": SURROGATE_FEATURES,
         "models": {},
     }
+
+    prediction_output = test_df[["location", "design_id"]].reset_index(drop=True)
 
     model_specs = {
         "efficiency": ("efficiency", MODEL_DIR / "xgboost_efficiency.pkl"),
         "autonomy": ("autonomy", MODEL_DIR / "xgboost_autonomy.pkl"),
     }
 
-    prediction_output = test_df[["location", "design_id"]].copy()
+    final_models = {}
+
     for model_name, (target, model_path) in model_specs.items():
-        print(f"\nTraining {model_name} model...")
-        model, best_params, best_cv_r2 = _fit_model(
-            X_train, train_df[target], groups
+        print(f"\nTraining and validating {model_name} model...")
+
+        tuned_model, best_params, best_group_cv_r2 = tune_model(
+            X_train,
+            train_df[target],
+            groups,
         )
-        predictions = model.predict(X_test)
-        test_metrics = _metrics(test_df[target], predictions)
-        joblib.dump(model, model_path)
+
+        holdout_predictions = tuned_model.predict(X_test)
+        holdout_metrics = metrics(test_df[target], holdout_predictions)
 
         prediction_output[f"actual_{target}"] = test_df[target].to_numpy()
-        prediction_output[f"predicted_{target}"] = predictions
+        prediction_output[f"predicted_{target}"] = holdout_predictions
         prediction_output[f"residual_{target}"] = (
-            test_df[target].to_numpy() - predictions
+            test_df[target].to_numpy() - holdout_predictions
         )
 
-        all_results["models"][model_name] = {
+        # Retrain the deployment model on all three locations after evaluation.
+        deployment_model = final_model(best_params)
+        deployment_model.fit(X_all, df[target])
+        joblib.dump(deployment_model, model_path)
+        final_models[model_name] = deployment_model
+
+        results["models"][model_name] = {
             "target": target,
-            "best_group_cv_r2": best_cv_r2,
+            "best_group_cv_r2_on_training_locations": best_group_cv_r2,
             "best_parameters": best_params,
-            "holdout_metrics": test_metrics,
+            "unseen_location_holdout_metrics": holdout_metrics,
+            "deployment_training_rows": int(len(df)),
         }
-        print(f"Holdout metrics: {test_metrics}")
+
+        print(f"  Group-CV R2: {best_group_cv_r2:.4f}")
+        print(
+            "  Vavuniya holdout — "
+            f"R2: {holdout_metrics['r2']:.4f}, "
+            f"MAE: {holdout_metrics['mae']:.4f}, "
+            f"RMSE: {holdout_metrics['rmse']:.4f}"
+        )
+        print(f"  Final model saved: {model_path}")
 
     joblib.dump(SURROGATE_FEATURES, MODEL_DIR / "feature_names.pkl")
-    prediction_output.to_csv(RESULT_DIR / "surrogate_holdout_predictions.csv", index=False)
-    with open(RESULT_DIR / "surrogate_metrics.json", "w", encoding="utf-8") as handle:
-        json.dump(all_results, handle, indent=2)
 
-    efficiency_model = joblib.load(MODEL_DIR / "xgboost_efficiency.pkl")
+    prediction_output.to_csv(
+        RESULT_DIR / "surrogate_holdout_predictions.csv",
+        index=False,
+    )
+
+    with (RESULT_DIR / "surrogate_metrics.json").open(
+        "w", encoding="utf-8"
+    ) as handle:
+        json.dump(results, handle, indent=2)
+
     importance = pd.DataFrame(
         {
             "feature": SURROGATE_FEATURES,
-            "importance": efficiency_model.feature_importances_,
+            "importance": final_models["efficiency"].feature_importances_,
         }
     ).sort_values("importance", ascending=False)
-    importance.to_csv(RESULT_DIR / "efficiency_feature_importance.csv", index=False)
+    importance.to_csv(
+        RESULT_DIR / "efficiency_feature_importance.csv",
+        index=False,
+    )
 
-    print(f"\nModels saved to {MODEL_DIR}")
-    print(f"Evaluation artifacts saved to {RESULT_DIR}")
+    print("\nTraining completed.")
+    print(f"Models saved to: {MODEL_DIR}")
+    print(f"Evaluation files saved to: {RESULT_DIR}")
 
 
 if __name__ == "__main__":
