@@ -21,17 +21,24 @@ OUTPUT_PATH = DATA_DIR / "training_data_all_inputs.csv"
 DIAGNOSTIC_PATH = DATA_DIR / "training_data_diagnostics.csv"
 
 LOCATIONS = [
-    {"name": "Vavuniya", "lat": 8.9, "lon": 79.9},
-    {"name": "Colombo", "lat": 6.9, "lon": 79.9},
-    {"name": "Jaffna", "lat": 9.7, "lon": 80.0},
-    {"name": "Kandy", "lat": 7.3, "lon": 80.6},
-    {"name": "Galle", "lat": 6.0, "lon": 80.2},
-    {"name": "Trincomalee", "lat": 8.6, "lon": 81.2},
-    {"name": "Batticaloa", "lat": 7.7, "lon": 81.7},
-    {"name": "Anuradhapura", "lat": 8.3, "lon": 80.4},
+    {
+        "name": "Vavuniya",
+        "lat": 8.7542,
+        "lon": 80.4982,
+    },
+    {
+        "name": "Colombo",
+        "lat": 6.9271,
+        "lon": 79.8612,
+    },
+    {
+        "name": "Jaffna",
+        "lat": 9.6615,
+        "lon": 80.0255,
+    },
 ]
 
-SAMPLES_PER_LOCATION = 400
+SAMPLES_PER_LOCATION = 3
 BASE_SEED = 42
 
 SAMPLED_VARIABLES = [
@@ -77,7 +84,7 @@ def _base_user(location: dict) -> UserInputs:
     user.location = location["name"]
     user.latitude = location["lat"]
     user.longitude = location["lon"]
-    user.year = 2021
+    user.year = 2023
     user.tilt_angle = 10.0
     user.azimuth_angle = 180.0
     user.autonomy_days = 0.0
