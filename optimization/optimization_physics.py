@@ -126,19 +126,25 @@ def setup_deap(user=None):
 
 def run_optimization_physics(user=None):
     global CURRENT_USER, CURRENT_SOLAR_DATA, CURRENT_LOAD_DATA, EVALUATION_CACHE
+
     CURRENT_USER = user or UserInputs()
 
-    # Critical speed correction: profiles are independent of the candidate design
-    # and are now fetched once per optimization run, not once per individual.
     CURRENT_SOLAR_DATA = fetch_solar_data(CURRENT_USER)
     CURRENT_LOAD_DATA = fetch_load_data(CURRENT_USER)
     EVALUATION_CACHE = {}
 
     random.seed(RANDOM_SEED)
     np.random.seed(RANDOM_SEED)
+
     toolbox = setup_deap(CURRENT_USER)
     population = toolbox.population(n=POPULATION_SIZE)
-    population, _ = algorithms.eaMuPlusLambda(
+
+    print(
+        f"\nStarting physics optimization: "
+        f"{POPULATION_SIZE} individuals × {N_GENERATIONS} generations"
+    )
+
+    population, logbook = algorithms.eaMuPlusLambda(
         population,
         toolbox,
         mu=POPULATION_SIZE,
@@ -146,8 +152,14 @@ def run_optimization_physics(user=None):
         cxpb=CX_PROB,
         mutpb=MUT_PROB,
         ngen=N_GENERATIONS,
-        verbose=False,
+        verbose=True,
     )
+
+    print(
+        f"Physics optimization completed. "
+        f"Unique simulator evaluations: {len(EVALUATION_CACHE)}"
+    )
+
     return population
 
 
