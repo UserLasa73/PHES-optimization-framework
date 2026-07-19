@@ -1,229 +1,155 @@
-"""
-optimization_physics.py
-NSGA-II Multi-Objective Optimization using REAL Physics Simulator.
-This is a SEPARATE file - does NOT affect the ML optimizer.
-"""
+"""NSGA-II optimization using the corrected hourly physics simulator."""
+
+from __future__ import annotations
+
+import random
 
 import numpy as np
-import random
-from deap import base, creator, tools, algorithms
-import warnings
-warnings.filterwarnings('ignore')
+from deap import algorithms, base, creator, tools
 
-from src.user_inputs import UserInputs
-from src.cost_model import calculate_capital_cost
+from optimization.common import extract_nondominated, front_to_records
+from src.model_features import TRAINING_BOUNDS
 from src.simulator import PumpedHydroSimulator
-from src.solar_data_loader import fetch_solar_data, fetch_load_data
-
-
-# ============================================================================
-# CONFIGURATION
-# ============================================================================
-
-DEFAULT_USER = UserInputs()
-DEFAULT_USER.latitude = 8.9
-DEFAULT_USER.longitude = 79.9
-DEFAULT_USER.pv_kwp = 30.0
-DEFAULT_USER.tilt_angle = 10.0
-DEFAULT_USER.azimuth_angle = 0.0
-DEFAULT_USER.daily_energy_kwh = 50.0
-DEFAULT_USER.upper_reservoir_type = "new_tank"
-DEFAULT_USER.lower_reservoir_type = "new_tank"
-DEFAULT_USER.autonomy_days = 2.0
-DEFAULT_USER.evaporation_rate_mm_month = 50.0
-DEFAULT_USER.demand_spike_factor = 1.0
-DEFAULT_USER.has_grid_backup = False
-DEFAULT_USER.pipe_roughness_m = 0.00015
-DEFAULT_USER.max_volume_m3 = 800  # Default matches current bound 800
-DEFAULT_USER.budget_lkr = None
-
-CURRENT_USER = DEFAULT_USER
-
-# ===== BOUNDS =====
-def get_bounds(user=None):
-    if user is None:
-        user = CURRENT_USER
-    
-    bounds = {
-        'volume_m3': (20, user.max_volume_m3),
-        'head_m': (5, 45),
-        'pipe_diameter_m': (0.05, 0.35),
-        'pump_power_kw': (2, 30),
-        'turbine_power_kw': (2, 25)
-    }
-    return bounds
+from src.solar_data_loader import fetch_load_data, fetch_solar_data
+from src.user_inputs import UserInputs
 
 POPULATION_SIZE = 100
 N_GENERATIONS = 50
 CX_PROB = 0.8
 MUT_PROB = 0.2
+MIN_EFFICIENCY = 70.0
+RANDOM_SEED = 42
+
+CURRENT_USER = UserInputs()
+CURRENT_SOLAR_DATA = None
+CURRENT_LOAD_DATA = None
+EVALUATION_CACHE = {}
 
 
-# ============================================================================
-# FITNESS FUNCTION (Uses REAL Physics Simulator)
-# ============================================================================
+def get_bounds(user=None):
+    user = user or CURRENT_USER
+    maximum_volume = min(float(user.max_volume_m3), TRAINING_BOUNDS["volume_m3"][1])
+    return {
+        "volume_m3": (TRAINING_BOUNDS["volume_m3"][0], maximum_volume),
+        "head_m": TRAINING_BOUNDS["head_m"],
+        "pipe_diameter_m": TRAINING_BOUNDS["pipe_diameter_m"],
+        "pump_power_kw": TRAINING_BOUNDS["pump_power_kw"],
+        "turbine_power_kw": TRAINING_BOUNDS["turbine_power_kw"],
+    }
+
 
 def evaluate(individual):
-    """Evaluate a design using the REAL Physics Simulator."""
-    
-    user = CURRENT_USER
-    
-    # Extract design parameters
+    key = tuple(round(float(value), 7) for value in individual)
+    cached = EVALUATION_CACHE.get(key)
+    if cached is not None:
+        return cached
+
     design = {
-        'volume_m3': individual[0],
-        'head_m': individual[1],
-        'pipe_diameter_m': individual[2],
-        'pump_power_kw': individual[3],
-        'turbine_power_kw': individual[4]
+        "volume_m3": float(individual[0]),
+        "head_m": float(individual[1]),
+        "pipe_diameter_m": float(individual[2]),
+        "pump_power_kw": float(individual[3]),
+        "turbine_power_kw": float(individual[4]),
     }
-    
-    # ===== COST =====
-    cost_dict = calculate_capital_cost(
-        individual[0], individual[1], individual[2],
-        individual[3], individual[4],
-        user.pv_kwp,
-        user.upper_reservoir_type,
-        user.lower_reservoir_type
+    metrics = PumpedHydroSimulator(CURRENT_USER, design).simulate(
+        CURRENT_SOLAR_DATA, CURRENT_LOAD_DATA
+    )["metrics"]
+    efficiency = float(metrics["efficiency_percent"])
+    autonomy = float(metrics["autonomy_days"])
+    cost = float(metrics["capital_cost_lkr"])
+
+    feasible = (
+        metrics["is_physically_valid"]
+        and efficiency >= MIN_EFFICIENCY
+        and autonomy >= CURRENT_USER.autonomy_days
+        and (
+            CURRENT_USER.budget_lkr is None
+            or cost <= float(CURRENT_USER.budget_lkr)
+        )
     )
-    cost = cost_dict['total_lkr']
-    
-    # ===== EFFICIENCY & AUTONOMY (REAL SIMULATOR) =====
-    solar_data = fetch_solar_data(user)
-    load_data = fetch_load_data(user)
-    
-    sim = PumpedHydroSimulator(user, design)
-    results = sim.simulate(solar_data, load_data)
-    metrics = results['metrics']
-    
-    efficiency = metrics['efficiency_percent']
-    autonomy = metrics['autonomy_days']
-    
-    # ===== HARD CONSTRAINTS =====
-    if efficiency < 70.0:
-        return [1000.0, 100000000.0]
+    result = (efficiency, cost) if feasible else (-1.0e6, 1.0e12)
+    EVALUATION_CACHE[key] = result
+    return result
 
-    if autonomy < user.autonomy_days:
-        return [1000.0, 100000000.0]
-    
-    if user.budget_lkr is not None and cost > user.budget_lkr:
-        return [1000.0, 100000000.0]
-
-    return [-efficiency, cost]
-
-
-# ============================================================================
-# SETUP DEAP
-# ============================================================================
 
 def setup_deap(user=None):
-    if user is None:
-        user = CURRENT_USER
-    
+    user = user or CURRENT_USER
     bounds = get_bounds(user)
-    
-    creator.create("FitnessMin", base.Fitness, weights=(-1.0, 1.0))
-    creator.create("Individual", list, fitness=creator.FitnessMin)
-    
+    if bounds["volume_m3"][1] < bounds["volume_m3"][0]:
+        raise ValueError("Maximum volume is below the lower design bound.")
+
+    if not hasattr(creator, "FitnessPHESPhysics"):
+        creator.create("FitnessPHESPhysics", base.Fitness, weights=(1.0, -1.0))
+    if not hasattr(creator, "IndividualPHESPhysics"):
+        creator.create(
+            "IndividualPHESPhysics", list, fitness=creator.FitnessPHESPhysics
+        )
+
     toolbox = base.Toolbox()
-    
-    toolbox.register("attr_volume", random.uniform, bounds['volume_m3'][0], bounds['volume_m3'][1])
-    toolbox.register("attr_head", random.uniform, bounds['head_m'][0], bounds['head_m'][1])
-    toolbox.register("attr_pipe", random.uniform, bounds['pipe_diameter_m'][0], bounds['pipe_diameter_m'][1])
-    toolbox.register("attr_pump", random.uniform, bounds['pump_power_kw'][0], bounds['pump_power_kw'][1])
-    toolbox.register("attr_turbine", random.uniform, bounds['turbine_power_kw'][0], bounds['turbine_power_kw'][1])
-    
-    toolbox.register("individual", tools.initCycle, creator.Individual,
-                     (toolbox.attr_volume, toolbox.attr_head, toolbox.attr_pipe,
-                      toolbox.attr_pump, toolbox.attr_turbine), n=1)
-    
+    toolbox.register("attr_volume", random.uniform, *bounds["volume_m3"])
+    toolbox.register("attr_head", random.uniform, *bounds["head_m"])
+    toolbox.register("attr_pipe", random.uniform, *bounds["pipe_diameter_m"])
+    toolbox.register("attr_pump", random.uniform, *bounds["pump_power_kw"])
+    toolbox.register("attr_turbine", random.uniform, *bounds["turbine_power_kw"])
+    toolbox.register(
+        "individual",
+        tools.initCycle,
+        creator.IndividualPHESPhysics,
+        (
+            toolbox.attr_volume,
+            toolbox.attr_head,
+            toolbox.attr_pipe,
+            toolbox.attr_pump,
+            toolbox.attr_turbine,
+        ),
+        n=1,
+    )
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
-    
-    toolbox.register("mate", tools.cxSimulatedBinaryBounded,
-                     low=[bounds['volume_m3'][0], bounds['head_m'][0], 
-                          bounds['pipe_diameter_m'][0], bounds['pump_power_kw'][0],
-                          bounds['turbine_power_kw'][0]],
-                     up=[bounds['volume_m3'][1], bounds['head_m'][1], 
-                         bounds['pipe_diameter_m'][1], bounds['pump_power_kw'][1],
-                         bounds['turbine_power_kw'][1]],
-                     eta=20.0)
-    
-    toolbox.register("mutate", tools.mutPolynomialBounded,
-                     low=[bounds['volume_m3'][0], bounds['head_m'][0], 
-                          bounds['pipe_diameter_m'][0], bounds['pump_power_kw'][0],
-                          bounds['turbine_power_kw'][0]],
-                     up=[bounds['volume_m3'][1], bounds['head_m'][1], 
-                         bounds['pipe_diameter_m'][1], bounds['pump_power_kw'][1],
-                         bounds['turbine_power_kw'][1]],
-                     eta=20.0, indpb=0.1)
-    
+
+    low = [bounds[name][0] for name in bounds]
+    high = [bounds[name][1] for name in bounds]
+    toolbox.register(
+        "mate", tools.cxSimulatedBinaryBounded, low=low, up=high, eta=20.0
+    )
+    toolbox.register(
+        "mutate",
+        tools.mutPolynomialBounded,
+        low=low,
+        up=high,
+        eta=20.0,
+        indpb=0.1,
+    )
     toolbox.register("select", tools.selNSGA2)
     toolbox.register("evaluate", evaluate)
-    
     return toolbox
 
 
-# ============================================================================
-# RUN OPTIMIZATION (Physics Mode)
-# ============================================================================
-
 def run_optimization_physics(user=None):
-    """Run NSGA-II optimization using REAL Physics Simulator."""
-    
-    global CURRENT_USER
-    
-    if user is not None:
-        CURRENT_USER = user
-    else:
-        CURRENT_USER = DEFAULT_USER
-    
-    print("=" * 70)
-    print("NSGA-II OPTIMIZATION (PHYSICS SIMULATOR)")
-    print("=" * 70)
-    print(f"Reservoir Type: {CURRENT_USER.upper_reservoir_type}")
-    print(f"PV Capacity: {CURRENT_USER.pv_kwp} kWp")
-    print(f"Autonomy: >= {CURRENT_USER.autonomy_days} days")
-    print(f"Max Volume: {CURRENT_USER.max_volume_m3} m3")  # Add this line
-    print("=" * 70)
-    print("  WARNING: Physics simulator mode is SLOW.")
-    print(f"   {POPULATION_SIZE * N_GENERATIONS} evaluations")
-    print(f"   Estimated time: ~{(POPULATION_SIZE * N_GENERATIONS * 0.5) / 60:.0f} minutes")
-    print("=" * 70)
-    
-    toolbox = setup_deap(user=CURRENT_USER)  # Pass user here
+    global CURRENT_USER, CURRENT_SOLAR_DATA, CURRENT_LOAD_DATA, EVALUATION_CACHE
+    CURRENT_USER = user or UserInputs()
+
+    # Critical speed correction: profiles are independent of the candidate design
+    # and are now fetched once per optimization run, not once per individual.
+    CURRENT_SOLAR_DATA = fetch_solar_data(CURRENT_USER)
+    CURRENT_LOAD_DATA = fetch_load_data(CURRENT_USER)
+    EVALUATION_CACHE = {}
+
+    random.seed(RANDOM_SEED)
+    np.random.seed(RANDOM_SEED)
+    toolbox = setup_deap(CURRENT_USER)
     population = toolbox.population(n=POPULATION_SIZE)
-    
-    stats = tools.Statistics(lambda ind: ind.fitness.values)
-    stats.register("avg", np.mean, axis=0)
-    stats.register("min", np.min, axis=0)
-    stats.register("max", np.max, axis=0)
-    
-    print("\nRunning optimization...")
-    population, logbook = algorithms.eaMuPlusLambda(
-        population, toolbox, mu=POPULATION_SIZE, lambda_=POPULATION_SIZE,
-        cxpb=CX_PROB, mutpb=MUT_PROB, ngen=N_GENERATIONS,
-        stats=stats, verbose=False
+    population, _ = algorithms.eaMuPlusLambda(
+        population,
+        toolbox,
+        mu=POPULATION_SIZE,
+        lambda_=POPULATION_SIZE,
+        cxpb=CX_PROB,
+        mutpb=MUT_PROB,
+        ngen=N_GENERATIONS,
+        verbose=False,
     )
-    
-    print("Optimization complete!")
     return population
 
 
-# ============================================================================
-# EXTRACT PARETO FRONT
-# ============================================================================
-
 def extract_pareto_front_physics(population):
-    """Extract Pareto front designs from population."""
-    pareto_front = []
-    for ind in population:
-        if ind.fitness.values[0] < 1000:
-            pareto_front.append({
-                'volume_m3': ind[0],
-                'head_m': ind[1],
-                'pipe_diameter_m': ind[2],
-                'pump_power_kw': ind[3],
-                'turbine_power_kw': ind[4],
-                'efficiency': -ind.fitness.values[0],
-                'cost': ind.fitness.values[1]
-            })
-    return sorted(pareto_front, key=lambda x: x['efficiency'], reverse=True)
+    return front_to_records(extract_nondominated(population))

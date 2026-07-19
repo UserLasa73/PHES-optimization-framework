@@ -1,0 +1,13 @@
+{
+  "rows": 3200,
+  "unique_feature_vectors": 400,
+  "rows_belonging_to_duplicated_feature_vectors": 3200,
+  "random_row_split": {
+    "r2": 0.9962005817845953,
+    "mae": 1.0090782980366249
+  },
+  "grouped_unseen_design_split": {
+    "r2": 0.7669541273890945,
+    "mae": 7.918041113932022
+  }
+}

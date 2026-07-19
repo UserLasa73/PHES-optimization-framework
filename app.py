@@ -1,385 +1,247 @@
-"""
-app.py
-Streamlit web interface for PHES optimization.
-"""
+"""Streamlit interface for the corrected PHES decision-support prototype."""
 
-import streamlit as st
+from __future__ import annotations
+
 import pandas as pd
-import numpy as np
-import joblib
 import plotly.express as px
+import streamlit as st
 
-
-from src.user_inputs import UserInputs
-from src.cost_model import calculate_capital_cost
+from optimization.common import select_compromise_design
 from optimization.optimization import run_optimization, extract_pareto_front
-from optimization.optimization_physics import run_optimization_physics, extract_pareto_front_physics
+from optimization.optimization_physics import (
+    extract_pareto_front_physics,
+    run_optimization_physics,
+)
+from src.cost_model import calculate_capital_cost
+from src.model_features import TRAINING_BOUNDS
+from src.user_inputs import UserInputs
 
-st.set_page_config(page_title="PHES Optimizer", layout="wide")
-
-st.title(" Solar-Pumped Hydro Energy Storage Optimizer")
-st.markdown("Design your own small-scale PHES system in seconds.")
-
-# ============================================================================
-# LOCATIONS DATABASE (Hardcoded)
-# ============================================================================
+st.set_page_config(page_title="PHES Design Explorer", layout="wide")
+st.title("Solar–Pumped Hydro Design Explorer")
+st.info(
+    "Research prototype for preliminary design comparison. Results are not "
+    "construction-ready engineering specifications or supplier quotations."
+)
 
 LOCATIONS = [
-    {'name': 'Vavuniya', 'lat': 8.9, 'lon': 79.9},
-    {'name': 'Colombo', 'lat': 6.9, 'lon': 79.9},
-    {'name': 'Jaffna', 'lat': 9.7, 'lon': 80.0},
-    {'name': 'Kandy', 'lat': 7.3, 'lon': 80.6},
-    {'name': 'Galle', 'lat': 6.0, 'lon': 80.2},
-    {'name': 'Trincomalee', 'lat': 8.6, 'lon': 81.2},
-    {'name': 'Batticaloa', 'lat': 7.7, 'lon': 81.7},
-    {'name': 'Anuradhapura', 'lat': 8.3, 'lon': 80.4},
+    {"name": "Vavuniya", "lat": 8.9, "lon": 79.9},
+    {"name": "Colombo", "lat": 6.9, "lon": 79.9},
+    {"name": "Jaffna", "lat": 9.7, "lon": 80.0},
+    {"name": "Kandy", "lat": 7.3, "lon": 80.6},
+    {"name": "Galle", "lat": 6.0, "lon": 80.2},
+    {"name": "Trincomalee", "lat": 8.6, "lon": 81.2},
+    {"name": "Batticaloa", "lat": 7.7, "lon": 81.7},
+    {"name": "Anuradhapura", "lat": 8.3, "lon": 80.4},
 ]
 
-LOCATION_NAMES = [loc['name'] for loc in LOCATIONS]
+location_name = st.sidebar.selectbox(
+    "Location", [item["name"] for item in LOCATIONS]
+)
+location = next(item for item in LOCATIONS if item["name"] == location_name)
+st.sidebar.caption(f"{location['lat']}° N, {location['lon']}° E")
 
-# ============================================================================
-# SIDEBAR - USER INPUTS
-# ============================================================================
-
-st.sidebar.header("Site Parameters")
-
-# Location dropdown (instead of lat/lon)
-selected_location = st.sidebar.selectbox("Location", LOCATION_NAMES, index=0)
-
-# Get coordinates from selected location
-location_data = next(loc for loc in LOCATIONS if loc['name'] == selected_location)
-latitude = location_data['lat']
-longitude = location_data['lon']
-
-# Show coordinates (read-only feedback)
-st.sidebar.caption(f"Latitude: {latitude}°N, Longitude: {longitude}°E")
-
-st.sidebar.divider()
-
-st.sidebar.header(" System Parameters")
-
-pv_kwp = st.sidebar.number_input("PV Capacity (kWp)", value=20.0, min_value=5.0, max_value=100.0, step=1.0)
-daily_load = st.sidebar.number_input("Daily Load (kWh/day)", value=20.0, min_value=10.0, max_value=200.0, step=5.0)
-autonomy_days = st.sidebar.number_input("Autonomy (days)", value=1.0, min_value=0.0, max_value=5.0, step=0.5)
-reservoir_type = st.sidebar.selectbox("Reservoir Type", ["new_tank", "excavated", "pond", "river"], index=0)
-
-# Reservoir Volume Constraint
-st.sidebar.subheader("Reservoir Volume Constraint")
+st.sidebar.header("System requirements")
+pv_kwp = st.sidebar.number_input(
+    "Existing PV capacity (kWp)",
+    min_value=float(TRAINING_BOUNDS["pv_kwp"][0]),
+    max_value=float(TRAINING_BOUNDS["pv_kwp"][1]),
+    value=20.0,
+    step=1.0,
+    help="ML mode is restricted to the current surrogate training range.",
+)
+daily_load = st.sidebar.number_input(
+    "Daily energy demand (kWh/day)",
+    min_value=float(TRAINING_BOUNDS["daily_energy_kwh"][0]),
+    max_value=float(TRAINING_BOUNDS["daily_energy_kwh"][1]),
+    value=20.0,
+    step=1.0,
+)
+autonomy_days = st.sidebar.number_input(
+    "Required storage autonomy (days)", min_value=0.0, max_value=3.0, value=0.5, step=0.1
+)
+reservoir_type = st.sidebar.selectbox(
+    "Reservoir type", ["new_tank", "excavated", "pond", "river"]
+)
 max_volume_m3 = st.sidebar.number_input(
-    "Maximum Total Volume (m³)",
-    min_value=20,
+    "Maximum combined reservoir capacity (m³)",
+    min_value=int(TRAINING_BOUNDS["volume_m3"][0]),
+    max_value=int(TRAINING_BOUNDS["volume_m3"][1]),
     value=800,
     step=10,
-    help="Designs with volume exceeding this will be penalized"
+    help="This is upper gross capacity plus lower gross capacity.",
 )
 
-enable_budget = st.sidebar.checkbox("Set Budget Limit", value=False)
-
-if enable_budget:
+use_budget = st.sidebar.checkbox("Set budget limit")
+budget_lkr = None
+if use_budget:
     budget_lkr = st.sidebar.number_input(
-        "Budget (LKR)",
-        value=5000000,
-        min_value=500000,
-        max_value=10000000,
-        step=100000
+        "Maximum preliminary PHES cost (LKR)",
+        min_value=500_000,
+        max_value=20_000_000,
+        value=5_000_000,
+        step=100_000,
     )
-else:
-    budget_lkr = None  # No limit
 
-st.sidebar.divider()
-
-st.sidebar.header(" Advanced")
-
-evap_rate = st.sidebar.number_input("Evaporation Rate (mm/month)", value=50.0, min_value=20.0, max_value=100.0, step=5.0)
-pipe_roughness = st.sidebar.number_input("Pipe Roughness (m)", value=0.00015, format="%.5f", help="0.00015 = steel pipe, 0.0000015 = PVC")
-
-
-st.sidebar.divider()
-
-st.sidebar.header("Optimization Mode")
-
-optimization_mode = st.sidebar.radio(
-    "Select Optimizer",
-    ["ML Surrogate (Fast)", "Physics Simulator (Slow)"],
-    index=0,
-    help="ML Surrogate is fast but approximate. Physics Simulator is slow but accurate."
+st.sidebar.header("Model assumptions")
+evaporation = st.sidebar.number_input(
+    "Evaporation (mm/month)",
+    min_value=float(TRAINING_BOUNDS["evaporation_rate_mm_month"][0]),
+    max_value=float(TRAINING_BOUNDS["evaporation_rate_mm_month"][1]),
+    value=50.0,
+    step=5.0,
+)
+pipe_roughness = st.sidebar.number_input(
+    "Pipe roughness (m)", value=0.00015, format="%.7f"
+)
+mode = st.sidebar.radio(
+    "Evaluation mode",
+    ["ML surrogate", "Physics simulator"],
+    help=(
+        "ML mode is faster but requires corrected retrained model files. "
+        "Physics mode runs the hourly model directly."
+    ),
 )
 
 
+def make_user():
+    user = UserInputs()
+    user.location = location_name
+    user.latitude = location["lat"]
+    user.longitude = location["lon"]
+    user.pv_kwp = pv_kwp
+    user.daily_energy_kwh = daily_load
+    user.autonomy_days = autonomy_days
+    user.upper_reservoir_type = reservoir_type
+    user.lower_reservoir_type = reservoir_type
+    user.max_volume_m3 = max_volume_m3
+    user.budget_lkr = budget_lkr
+    user.evaporation_rate_mm_month = evaporation
+    user.pipe_roughness_m = pipe_roughness
+    user.tilt_angle = 10.0
+    user.azimuth_angle = 180.0
+    user.year = 2021
+    user.demand_spike_factor = 1.0
+    user.has_grid_backup = False
+    return user
 
-# ============================================================================
-# DISPLAY SHOPPING LIST
-# ============================================================================
 
-def display_shopping_list(design, user):
-    """Display shopping list using the cost model."""
-    
-    st.subheader("Shopping List / Bill of Materials")
-    
-    cost_dict = calculate_capital_cost(
-        design['volume_m3'],
-        design['head_m'],
-        design['pipe_diameter_m'],
-        design['pump_power_kw'],
-        design['turbine_power_kw'],
+def show_cost_breakdown(design, user):
+    result = calculate_capital_cost(
+        design["volume_m3"],
+        design["head_m"],
+        design["pipe_diameter_m"],
+        design["pump_power_kw"],
+        design["turbine_power_kw"],
         user.pv_kwp,
         user.upper_reservoir_type,
-        user.lower_reservoir_type
+        user.lower_reservoir_type,
     )
-    
-    total = cost_dict['total_lkr']
-    breakdown = cost_dict['breakdown']
-    
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        st.markdown("**1. Two Reservoirs**")
-        st.caption(f"Upper: {cost_dict['upper_volume_m3']:.0f} m³")
-        st.caption(f"Lower: {cost_dict['lower_volume_m3']:.0f} m³")
-        st.caption(f"Total: {cost_dict['total_volume_m3']:.0f} m³")
-        st.caption(f"Type: {user.upper_reservoir_type} / {user.lower_reservoir_type}")
-    with col2:
-        st.markdown(" ")
-        st.caption("Cost:")
-    with col3:
-        st.markdown(" ")
-        st.markdown(f"**LKR {breakdown['reservoir_lkr']:,.0f}**")
-    
-    st.divider()
-    
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        st.markdown("**2. Water Pump**")
-        st.caption(f"Power: {design['pump_power_kw']:.1f} kW")
-    with col2:
-        st.markdown(" ")
-        st.caption("Cost:")
-    with col3:
-        st.markdown(" ")
-        st.markdown(f"**LKR {breakdown['pump_lkr']:,.0f}**")
-    
-    st.divider()
-    
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        st.markdown("**3. Turbine**")
-        st.caption(f"Power: {design['turbine_power_kw']:.1f} kW")
-    with col2:
-        st.markdown(" ")
-        st.caption("Cost:")
-    with col3:
-        st.markdown(" ")
-        st.markdown(f"**LKR {breakdown['turbine_lkr']:,.0f}**")
-    
-    st.divider()
-    
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        st.markdown("**4. Penstock Pipes**")
-        st.caption(f"Diameter: {design['pipe_diameter_m']:.2f} m")
-        st.caption(f"Length: {design['head_m'] * 2.5:.0f} m (supply + return)")
-    with col2:
-        st.markdown(" ")
-        st.caption("Cost:")
-    with col3:
-        st.markdown(" ")
-        st.markdown(f"**LKR {breakdown['pipe_lkr']:,.0f}**")
-    
-    st.divider()
-    
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        st.markdown("**5. Control System**")
-        st.caption("Controllers, sensors, wiring, switches")
-    with col2:
-        st.markdown(" ")
-        st.caption("Cost:")
-    with col3:
-        st.markdown(" ")
-        st.markdown(f"**LKR {breakdown['bos_lkr']:,.0f}**")
-    
-    st.divider()
-    
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        st.markdown("**6. Installation & Civil**")
-        st.caption("Excavation, foundations, labor, transport")
-    with col2:
-        st.markdown(" ")
-        st.caption("Cost:")
-    with col3:
-        st.markdown(" ")
-        st.markdown(f"**LKR {breakdown['installation_lkr']:,.0f}**")
-    
-    st.divider()
-    
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        st.markdown("### TOTAL ESTIMATED COST")
-        st.caption("(PV panels EXCLUDED - user already has them)")
-        st.caption(f"≈ USD {total/300:,.0f} (at 1 USD = 300 LKR)")
-    with col2:
-        st.markdown(" ")
-    with col3:
-        st.markdown(" ")
-        st.markdown(f"### **LKR {total:,.0f}**")
-    
-    st.caption("*Estimated costs for design comparison. Actual prices may vary.*")
-
-# ============================================================================
-# RUN OPTIMIZATION
-# ============================================================================
-
-if st.sidebar.button(" Optimize Design", type="primary"):
-    
-    with st.spinner("Running optimization... This may take a minute."):
-        
-        # Create user inputs
-        user = UserInputs()
-        user.location = selected_location
-        user.latitude = latitude
-        user.longitude = longitude
-        user.pv_kwp = pv_kwp
-        user.tilt_angle = 10.0
-        user.azimuth_angle = 0.0
-        user.daily_energy_kwh = daily_load
-        user.autonomy_days = autonomy_days
-        user.upper_reservoir_type = reservoir_type
-        user.lower_reservoir_type = reservoir_type
-        user.evaporation_rate_mm_month = evap_rate
-        user.pipe_roughness_m = pipe_roughness
-        user.demand_spike_factor = 1.0
-        user.has_grid_backup = False
-        user.max_volume_m3= max_volume_m3 
-        user.budget_lkr = budget_lkr
-        
-        # Run optimization
-        # ===== RUN OPTIMIZATION (Choose mode) =====
-        if optimization_mode == "ML Surrogate (Fast)":
-            population = run_optimization(user)
-            pareto_front = extract_pareto_front(population)
-        else:
-            population = run_optimization_physics(user)
-            pareto_front = extract_pareto_front_physics(population)
-        
-        if pareto_front:
-            df = pd.DataFrame(pareto_front)
-            
-            # ===== PRINT TO TERMINAL =====
-            print("\n" + "=" * 70)
-            print("OPTIMAL DESIGN (from Streamlit)")
-            print("=" * 70)
-            print(f"Mode: {optimization_mode}")
-            print(f"Location: {selected_location}")
-            print(f"PV Capacity: {pv_kwp} kWp")
-            print(f"Daily Load: {daily_load} kWh/day")
-            print(f"Autonomy Required: {autonomy_days} days")
-            print(f"Reservoir Type: {reservoir_type}")
-            print(f"Max Volume: {max_volume_m3} m³")
-            print(f"Budget: {budget_lkr if budget_lkr is not None else 'No limit'}")
-            print(f"Efficiency Constraint: 70%")
-            print("-" * 70)
-            
-            best = df.iloc[0]
-            print(f"BEST DESIGN:")
-            print(f"  Reservoir Volume: {best['volume_m3']:.0f} m3")
-            print(f"  Head Height:      {best['head_m']:.1f} m")
-            print(f"  Pipe Diameter:    {best['pipe_diameter_m']:.3f} m")
-            print(f"  Pump Power:       {best['pump_power_kw']:.1f} kW")
-            print(f"  Turbine Power:    {best['turbine_power_kw']:.1f} kW")
-            print(f"  Efficiency:       {best['efficiency']:.1f}%")
-            print(f"  Cost:             LKR {best['cost']:,.0f}")
-            print("=" * 70)
-            
-            # ===== STREAMLIT DISPLAY =====
+    st.subheader("Preliminary cost breakdown")
+    table = pd.DataFrame(
+        [
+            {"Component": key.replace("_lkr", "").replace("_", " ").title(), "Cost (LKR)": value}
+            for key, value in result["breakdown"].items()
+        ]
+    )
+    st.dataframe(table.style.format({"Cost (LKR)": "{:,.0f}"}), hide_index=True)
+    st.write(f"**Estimated total:** LKR {result['total_lkr']:,.0f}")
+    st.caption(result["cost_model_note"])
 
 
-            st.success(f"Found {len(df)} optimal designs!")
-            
-            st.subheader("Optimal Designs (Pareto Front)")
-            st.dataframe(df.style.format({
-                'volume_m3': '{:.0f}',
-                'head_m': '{:.1f}',
-                'pipe_diameter_m': '{:.2f}',
-                'pump_power_kw': '{:.1f}',
-                'turbine_power_kw': '{:.1f}',
-                'efficiency': '{:.1f}%',
-                'cost': 'LKR {:.0f}'
-            }))
-            
-            best = df.iloc[0]
-            st.subheader(" Best Design")
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Efficiency", f"{best['efficiency']:.1f}%")
-            col2.metric("Cost", f"LKR {best['cost']:,.0f}")
-            col3.metric("Volume", f"{best['volume_m3']:.0f} m³")
-            col4.metric("Head", f"{best['head_m']:.1f} m")
-            
-            
-            # Shopping list
-            display_shopping_list(best, user)
-        
-            # Download
-            # ===== CREATE ENHANCED CSV WITH SHOPPING LIST =====
-            # Start with the Pareto front DataFrame
-            df_export = df.copy()
+if st.sidebar.button("Run design search", type="primary"):
+    user = make_user()
+    try:
+        with st.spinner("Evaluating candidate designs..."):
+            if mode == "ML surrogate":
+                population = run_optimization(user)
+                records = extract_pareto_front(population)
+            else:
+                population = run_optimization_physics(user)
+                records = extract_pareto_front_physics(population)
+    except Exception as error:
+        st.error(str(error))
+        st.stop()
 
-            # Add user inputs to EVERY row
-            df_export['location'] = selected_location
-            df_export['pv_kwp'] = pv_kwp
-            df_export['daily_load_kwh'] = daily_load
-            df_export['autonomy_required_days'] = autonomy_days
-            df_export['reservoir_type'] = reservoir_type
-            df_export['max_volume_m3'] = max_volume_m3
-            df_export['budget_lkr'] = budget_lkr if budget_lkr is not None else 'No limit'
+    if not records:
+        st.warning(
+            "No feasible non-dominated designs were found. Relax the autonomy or "
+            "budget requirement, or increase the permitted volume."
+        )
+        st.stop()
 
-            # Add shopping list breakdown for each design
-            shopping_breakdown = []
-            for _, row in df.iterrows():
-                cost_dict = calculate_capital_cost(
-                    row['volume_m3'],
-                    row['head_m'],
-                    row['pipe_diameter_m'],
-                    row['pump_power_kw'],
-                    row['turbine_power_kw'],
-                    user.pv_kwp,
-                    user.upper_reservoir_type,
-                    user.lower_reservoir_type
-                )
-                breakdown = cost_dict['breakdown']
-                shopping_breakdown.append({
-                    'reservoir_cost_lkr': breakdown['reservoir_lkr'],
-                    'pump_cost_lkr': breakdown['pump_lkr'],
-                    'turbine_cost_lkr': breakdown['turbine_lkr'],
-                    'pipe_cost_lkr': breakdown['pipe_lkr'],
-                    'bos_cost_lkr': breakdown['bos_lkr'],
-                    'installation_cost_lkr': breakdown['installation_lkr']
-                })
+    frame = pd.DataFrame(records)
+    compromise = select_compromise_design(records)
+    st.success(f"Found {len(frame)} non-dominated design alternatives.")
 
-            shopping_df = pd.DataFrame(shopping_breakdown)
-            df_export = pd.concat([df_export, shopping_df], axis=1)
+    chart = px.scatter(
+        frame,
+        x="cost",
+        y="efficiency",
+        hover_data=[
+            "volume_m3",
+            "head_m",
+            "pipe_diameter_m",
+            "pump_power_kw",
+            "turbine_power_kw",
+        ],
+        labels={"cost": "Estimated PHES cost (LKR)", "efficiency": "Efficiency (%)"},
+        title="Non-dominated cost–efficiency trade-off",
+    )
+    st.plotly_chart(chart, use_container_width=True)
 
-            # Reorder columns for readability
-            column_order = [
-                'location', 'pv_kwp', 'daily_load_kwh', 'autonomy_required_days',
-                'reservoir_type', 'max_volume_m3', 'budget_lkr',
-                'volume_m3', 'head_m', 'pipe_diameter_m', 'pump_power_kw', 'turbine_power_kw',
-                'efficiency', 'cost',
-                'reservoir_cost_lkr', 'pump_cost_lkr', 'turbine_cost_lkr',
-                'pipe_cost_lkr', 'bos_cost_lkr', 'installation_cost_lkr'
-            ]
-            df_export = df_export[column_order]
+    st.subheader("Balanced compromise design")
+    columns = st.columns(4)
+    columns[0].metric("Efficiency", f"{compromise['efficiency']:.2f}%")
+    columns[1].metric("Estimated cost", f"LKR {compromise['cost']:,.0f}")
+    columns[2].metric("Combined volume", f"{compromise['volume_m3']:.0f} m³")
+    columns[3].metric("Head", f"{compromise['head_m']:.1f} m")
 
-            # Download
-            csv = df_export.to_csv(index=False)
-            st.download_button("📥 Download Results (CSV)", csv, "phos_designs.csv")
-            
-        else:
-            st.error("No valid designs found.")
-            st.info("""
-            **To find a valid design, try adjusting these inputs:**
-            - Increase **Volume** (more storage = longer autonomy)
-            - Reduce **Autonomy** (shorter backup time requirement)
-            - Increase **PV Capacity** (more excess power to pump)
-            - Change **Reservoir Type** (excavated/pond are cheaper)
-            - Increase **Maximum Volume** (if you set a limit)
-            """)
+    st.write(
+        {
+            "Pipe diameter (m)": round(compromise["pipe_diameter_m"], 3),
+            "Pump power (kW)": round(compromise["pump_power_kw"], 2),
+            "Turbine power (kW)": round(compromise["turbine_power_kw"], 2),
+        }
+    )
+
+    st.subheader("True first Pareto front")
+    st.dataframe(
+        frame.style.format(
+            {
+                "volume_m3": "{:.1f}",
+                "head_m": "{:.2f}",
+                "pipe_diameter_m": "{:.3f}",
+                "pump_power_kw": "{:.2f}",
+                "turbine_power_kw": "{:.2f}",
+                "efficiency": "{:.3f}",
+                "cost": "{:,.0f}",
+            }
+        ),
+        use_container_width=True,
+    )
+
+    show_cost_breakdown(compromise, user)
+    export = frame.copy()
+    export.insert(0, "location", location_name)
+    export["latitude"] = location["lat"]
+    export["longitude"] = location["lon"]
+    export["pv_kwp"] = pv_kwp
+    export["daily_energy_kwh"] = daily_load
+    export["required_autonomy_days"] = autonomy_days
+    export["reservoir_type"] = reservoir_type
+    export["evaporation_rate_mm_month"] = evaporation
+    export["pipe_roughness_m"] = pipe_roughness
+    export["max_volume_m3"] = max_volume_m3
+    export["budget_lkr"] = budget_lkr if budget_lkr is not None else ""
+    export["evaluation_mode"] = mode
+    st.download_button(
+        "Download alternatives (CSV)",
+        export.to_csv(index=False),
+        file_name="phes_pareto_designs.csv",
+        mime="text/csv",
+    )
+
+st.caption(
+    "Solar input currently uses a reproducible PVlib clear-sky profile. Historical/TMY "
+    "weather and external engineering validation remain required for the final thesis."
+)

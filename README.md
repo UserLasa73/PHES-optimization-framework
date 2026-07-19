@@ -1,316 +1,124 @@
-# ⚡ Solar-Pumped Hydro Energy Storage (PHES) Optimizer
+# Solar–PHES Optimization Research Prototype — Corrected v1
 
-An interactive optimization framework for designing **small-scale, solar-integrated Pumped Hydro Energy Storage (PHES)** systems. The framework combines a detailed **physics-based simulator** with an **XGBoost machine learning surrogate model** to rapidly identify cost-effective and energy-efficient PHES designs for homes, farms, rural communities, and islands.
+This repository implements a preliminary computational framework for small-scale
+solar-integrated Pumped Hydro Energy Storage design. It combines:
 
----
+1. an hourly physics-based simulator;
+2. simulation-generated XGBoost surrogate models;
+3. NSGA-II multi-objective optimization; and
+4. a Streamlit decision-support interface.
 
-## 🚀 Key Features
+The Streamlit application is the delivery interface, not the main research contribution.
+Outputs are preliminary design alternatives and are not construction-ready specifications.
 
-- **Physics-Based Simulator**
-  - Simulates an entire **8760-hour (1-year)** operation.
-  - Models:
-    - Pipe friction losses
-    - Evaporation losses
-    - Seepage losses
-    - Variable pump efficiency
-    - Variable turbine efficiency
+## Important migration notice
 
-- **Machine Learning Surrogate**
-  - XGBoost model trained using **3200+ simulation samples**
-  - Evaluates candidate designs almost instantly
-  - Typical optimization time: **under 10 seconds**
+The dataset and XGBoost models included in the original repository were invalidated after a
+code audit identified simulator errors and train-test leakage. They have been moved to
+`data/legacy_invalidated/` and `models/legacy_invalidated/`.
 
-- **Dual Optimization Modes**
-  - ⚡ **ML Surrogate (Fast)** – Rapid optimization for design exploration
-  - 🔬 **Physics Simulator (Slow)** – Higher accuracy using the full simulator
+Read [IMPLEMENTATION_AUDIT_AND_FIXES.md](IMPLEMENTATION_AUDIT_AND_FIXES.md)
+before running new experiments.
 
-- **Multi-Objective Optimization**
-  - NSGA-II evolutionary algorithm
-  - Simultaneously:
-    - Maximizes round-trip efficiency
-    - Minimizes capital cost
-
-- **Interactive Streamlit Web Application**
-  - No programming knowledge required
-  - User-friendly interface
-  - Generates complete optimized designs
-  - Produces an estimated shopping list and cost breakdown
-
-- **Real-World Focus**
-  - Designed for Sri Lankan locations
-  - Tropical climate modelling
-  - Supports multiple reservoir types:
-    - `new_tank`
-    - `excavated`
-    - `pond`
-    - `river`
-
----
-## 📸 Application Preview
-
-![Streamlit-interface](screenshots/interface-1.png)
----
-
-![Streamlit-interface](screenshots/interface-2.png)
----
-
-![Streamlit-interface](screenshots/interface-2.png)
----
-
-# 📁 Project Structure
-
-```text
-PHES-optimization-framework/
-│
-├── app.py                          # Main Streamlit application
-│
-├── src/
-│   ├── simulator.py                # 8760-hour physics simulator
-│   ├── physics.py                  # Physical equations
-│   ├── cost_model.py               # Capital cost estimation
-│   ├── solar_data_loader.py        # Solar data using PVlib
-│   ├── user_inputs.py              # User input model
-│   └── constants.py                # Physical constants
-│
-├── optimization/
-│   ├── optimization.py             # NSGA-II using ML surrogate
-│   └── optimization_physics.py     # NSGA-II using physics simulator
-│
-├── scripts/
-│   ├── generate_dataset.py         # Dataset generation
-│   └── train_surrogate.py          # Train XGBoost model
-│
-├── models/                         # Trained ML models
-├── data/                           # Generated datasets
-├── Requirements.txt                # Python dependencies
-└── README.md
-```
-
----
-
-# 🛠 Installation
-
-## 1. Clone the Repository
-
-```bash
-git clone https://github.com/UserLasa73/PHES-optimization-framework.git
-cd PHES-optimization-framework
-```
-
-## 2. Create a Virtual Environment (Recommended)
-
-### Windows
+## Setup
 
 ```bash
 python -m venv venv
+```
+
+Windows:
+
+```bash
 venv\Scripts\activate
 ```
 
-### Linux / macOS
+Linux/macOS:
 
 ```bash
-python -m venv venv
 source venv/bin/activate
 ```
 
-## 3. Install Dependencies
+Install dependencies:
 
 ```bash
 pip install -r Requirements.txt
 ```
 
----
+## 1. Run tests
 
-# ▶️ Usage
+```bash
+python -m unittest discover -s tests -v
+```
 
-Launch the Streamlit application:
+## 2. Generate corrected training data
+
+```bash
+python -m scripts.generate_dataset
+```
+
+Outputs:
+
+- `data/training_data_all_inputs.csv`
+- `data/training_data_diagnostics.csv`
+
+## 3. Train corrected surrogate models
+
+```bash
+python -m scripts.train_surrogate
+```
+
+Outputs:
+
+- `models/xgboost_efficiency.pkl`
+- `models/xgboost_autonomy.pkl`
+- `models/feature_names.pkl`
+- `results/surrogate_metrics.json`
+- `results/surrogate_holdout_predictions.csv`
+- `results/efficiency_feature_importance.csv`
+
+The training procedure uses grouped cross-validation by location and reserves Anuradhapura
+as a complete external holdout location.
+
+## 4. Start the interface
 
 ```bash
 streamlit run app.py
 ```
 
----
+ML mode will refuse to run until corrected models have been trained. Physics mode uses the
+corrected simulator directly.
 
-## Using the Application
+## Current model scope
 
-### Step 1 – Enter Site Information
+The first corrected surrogate is intentionally restricted to its training ranges:
 
-Provide:
+- combined reservoir capacity: 20–800 m³;
+- head: 5–45 m;
+- pipe diameter: 0.05–0.35 m;
+- pump power: 2–30 kW;
+- turbine power: 2–25 kW;
+- PV capacity: 5–30 kWp;
+- daily demand: 10–50 kWh/day;
+- evaporation: 30–80 mm/month.
 
-- Location
-- Solar PV capacity (kWp)
-- Daily energy demand (kWh/day)
-- Required autonomy (days)
-- Reservoir type
+Factory or island scenarios outside these ranges require an expanded simulation dataset and
+new model training. Do not extrapolate the current XGBoost model.
 
-Optional constraints:
+## Scientific limitations
 
-- Maximum reservoir volume
-- Budget
-- Minimum efficiency
+The current PV profile is a reproducible PVlib clear-sky baseline, not measured weather.
+The cost model is for relative comparison and requires calibration with local quotations.
+External simulator/field validation remains required for the final thesis.
 
----
+## 5. Physics revalidation of an ML Pareto front
 
-### Step 2 – Select Optimization Mode
-
-Choose one of the following:
-
-- **ML Surrogate (Fast)** ⚡
-  - Rapid optimization
-  - Ideal for exploring multiple design options
-
-- **Physics Simulator (Slow)** 🔬
-  - Uses the full 8760-hour simulator
-  - Higher accuracy
-  - Suitable for validation
-
----
-
-### Step 3 – Run Optimization
-
-Click **Optimize Design**.
-
-The application will generate:
-
-- ✅ Optimal PHES design
-- ✅ Pareto front
-- ✅ Performance statistics
-- ✅ Estimated shopping list
-- ✅ Cost breakdown
-
----
-
-# 📊 Comparison Test
-
-The following test compares the **ML Surrogate** and the **Physics Simulator** using the same design constraints.
-
-### Test Configuration
-
-| Parameter | Value |
-|-----------|------:|
-| Location | Vavuniya |
-| PV Capacity | 20.0 kWp |
-| Daily Load | 20.0 kWh/day |
-| Required Autonomy | 0.5 days |
-| Reservoir Type | new_tank |
-| Maximum Reservoir Volume | 800 m³ |
-| Budget | LKR 4,000,000 |
-| Efficiency Constraint | 70% |
-
----
-
-## ⚡ ML Surrogate (Fast)
-
-```text
-BEST DESIGN
-
-Reservoir Volume : 491 m³
-Head Height      : 44.6 m
-Pipe Diameter    : 0.272 m
-Pump Power       : 4.6 kW
-Turbine Power    : 10.0 kW
-
-Round-trip Efficiency : 77.7%
-Estimated Cost        : LKR 3,991,539
-```
-
-**Optimization Time:** **< 10 seconds**
-
----
-
-## 🔬 Physics Simulator (Slow)
-
-```text
-BEST DESIGN
-
-Reservoir Volume : 636 m³
-Head Height      : 37.2 m
-Pipe Diameter    : 0.349 m
-Pump Power       : 2.0 kW
-Turbine Power    : 6.4 kW
-
-Round-trip Efficiency : 76.8%
-Estimated Cost        : LKR 3,998,089
-```
-
-**Optimization Time:** Approximately **10 minutes**
-
----
-
-## 📈 Comparison Summary
-
-| Metric | ML Surrogate | Physics Simulator |
-|-------|-------------:|------------------:|
-| Reservoir Volume | 491 m³ | 636 m³ |
-| Head Height | 44.6 m | 37.2 m |
-| Pipe Diameter | 0.272 m | 0.349 m |
-| Pump Power | 4.6 kW | 2.0 kW |
-| Turbine Power | 10.0 kW | 6.4 kW |
-| Round-trip Efficiency | **77.7%** | **76.8%** |
-| Estimated Cost | LKR 3,991,539 | LKR 3,998,089 |
-| Optimization Time | **< 10 s** | **≈ 40 min** |
-
----
-
-### Conclusion
-
-The **ML Surrogate** produced a design with **comparable efficiency (77.7% vs. 76.8%)** and a **similar estimated cost** to the full **Physics Simulator**, while reducing optimization time from **approximately 40 minutes to under 10 seconds**. This demonstrates that the XGBoost surrogate model provides a fast and practical alternative for real-time PHES design optimization with minimal compromise in solution quality.
-
----
-
-# 🤖 Training the Machine Learning Surrogate
-
-To generate a new dataset:
+After exporting the Pareto alternatives from Streamlit, re-evaluate the exact same designs
+with the corrected hourly simulator:
 
 ```bash
-python scripts/generate_dataset.py
+python -m scripts.validate_pareto phes_pareto_designs.csv
 ```
 
-
-Train the XGBoost surrogate model:
-
-```bash
-python scripts/train_surrogate.py
-```
-
-The trained model will be saved inside the **models/** directory.
-
----
-
-# 🧰 Technologies Used
-
-- Python
-- Streamlit
-- XGBoost
-- DEAP (NSGA-II)
-- PVlib
-- NumPy
-- Pandas
-- Plotly
-- SciPy
-
----
-
-# 📄 License
-
-This project is licensed under the **MIT License**.
-
----
-
-# 🙏 Acknowledgments
-
-This project was developed as part of a **BSc (Hons) in Information Technology** research project at the **University of Vavuniya, Sri Lanka**.
-
-Special thanks to the developers and maintainers of:
-
-- Streamlit
-- XGBoost
-- DEAP
-- PVlib
-- Plotly
-- NumPy
-- Pandas
-- SciPy
-
-whose open-source libraries made this research possible.
-````
+This creates a row-by-row comparison and a JSON summary under `results/`. This comparison,
+not a comparison between two separately optimized "best" designs, is the defensible way to
+validate surrogate-assisted optimization.

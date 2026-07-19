@@ -1,178 +1,156 @@
-"""
-train_surrogate.py
-Train XGBoost models on ALL user inputs (9 features).
-"""
+"""Train and evaluate XGBoost surrogate models without duplicate-row leakage."""
 
-import pandas as pd
-import numpy as np
-import xgboost as xgb
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.metrics import r2_score, mean_absolute_error
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
 import joblib
-import os
-import warnings
-warnings.filterwarnings('ignore')
+import numpy as np
+import pandas as pd
+import xgboost as xgb
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.model_selection import GroupKFold, RandomizedSearchCV
 
-from src.user_inputs import UserInputs
-from src.simulator import PumpedHydroSimulator
-from src.solar_data_loader import fetch_solar_data, fetch_load_data
+from src.model_features import SURROGATE_FEATURES
 
-print("=" * 70)
-print("XGBOOST SURROGATE TRAINING (9 Features)")
-print("=" * 70)
+ROOT = Path(__file__).resolve().parents[1]
+DATA_PATH = ROOT / "data" / "training_data_all_inputs.csv"
+MODEL_DIR = ROOT / "models"
+RESULT_DIR = ROOT / "results"
+MODEL_DIR.mkdir(exist_ok=True)
+RESULT_DIR.mkdir(exist_ok=True)
 
-# ============================================================================
-# LOAD DATA
-# ============================================================================
+HOLDOUT_LOCATION = "Anuradhapura"
+RANDOM_SEED = 42
 
-df = pd.read_csv('training_data_all_inputs.csv')
-print(f"Loaded {len(df)} samples")
 
-# ============================================================================
-# FEATURES (ALL 9)
-# ============================================================================
+def _metrics(actual, predicted):
+    return {
+        "r2": float(r2_score(actual, predicted)),
+        "mae": float(mean_absolute_error(actual, predicted)),
+        "rmse": float(np.sqrt(mean_squared_error(actual, predicted))),
+    }
 
-features = [
-    'volume_m3', 'head_m', 'pipe_diameter_m', 
-    'pump_power_kw', 'turbine_power_kw',
-    'pv_kwp', 'daily_energy_kwh', 
-    'evaporation_rate_mm_month', 'reservoir_type_code'
-]
 
-X = df[features].values
-y_eff = df['efficiency'].values
-y_cost = df['cost'].values
-y_auto = df['autonomy'].values
+def _fit_model(X_train, y_train, groups):
+    estimator = xgb.XGBRegressor(
+        objective="reg:squarederror",
+        random_state=RANDOM_SEED,
+        n_jobs=-1,
+    )
+    distributions = {
+        "n_estimators": [100, 200, 300, 500],
+        "learning_rate": [0.03, 0.05, 0.10, 0.15],
+        "max_depth": [3, 4, 5, 6, 7],
+        "min_child_weight": [1, 3, 5],
+        "subsample": [0.7, 0.8, 0.9, 1.0],
+        "colsample_bytree": [0.7, 0.8, 0.9, 1.0],
+        "reg_alpha": [0.0, 0.01, 0.1],
+        "reg_lambda": [1.0, 2.0, 5.0],
+    }
+    # Groups are locations. This prevents the same site from appearing in both
+    # training and validation folds during hyperparameter selection.
+    cv = GroupKFold(n_splits=min(5, groups.nunique()))
+    search = RandomizedSearchCV(
+        estimator,
+        param_distributions=distributions,
+        n_iter=30,
+        scoring="r2",
+        cv=cv,
+        random_state=RANDOM_SEED,
+        n_jobs=-1,
+        verbose=1,
+    )
+    search.fit(X_train, y_train, groups=groups)
+    return search.best_estimator_, search.best_params_, float(search.best_score_)
 
-print(f"\nFeatures ({len(features)}):")
-for i, f in enumerate(features):
-    print(f"  {i+1}. {f}")
 
-# ============================================================================
-# TRAIN-TEST SPLIT
-# ============================================================================
+def main():
+    if not DATA_PATH.exists():
+        raise FileNotFoundError(
+            f"Training dataset not found at {DATA_PATH}. Run "
+            "`python -m scripts.generate_dataset` first."
+        )
 
-X_train, X_test, y_eff_train, y_eff_test = train_test_split(
-    X, y_eff, test_size=0.2, random_state=42
-)
-_, _, y_cost_train, y_cost_test = train_test_split(
-    X, y_cost, test_size=0.2, random_state=42
-)
-_, _, y_auto_train, y_auto_test = train_test_split(
-    X, y_auto, test_size=0.2, random_state=42
-)
+    df = pd.read_csv(DATA_PATH)
+    missing = [column for column in SURROGATE_FEATURES if column not in df.columns]
+    if missing:
+        raise ValueError(
+            "Dataset uses the old feature schema. Regenerate it before training. "
+            f"Missing columns: {missing}"
+        )
+    if "location" not in df.columns:
+        raise ValueError("Dataset must retain location for grouped validation.")
+    if df.duplicated(subset=SURROGATE_FEATURES).any():
+        raise ValueError(
+            "Duplicate feature vectors detected. This would leak nearly identical "
+            "designs across train/test splits. Regenerate the dataset."
+        )
 
-print(f"\nTraining: {len(X_train)} | Test: {len(X_test)}")
+    train_df = df[df["location"] != HOLDOUT_LOCATION].copy()
+    test_df = df[df["location"] == HOLDOUT_LOCATION].copy()
+    if train_df.empty or test_df.empty:
+        raise ValueError(f"Could not create holdout set for {HOLDOUT_LOCATION}.")
 
-# ============================================================================
-# GRID SEARCH
-# ============================================================================
+    X_train = train_df[SURROGATE_FEATURES]
+    X_test = test_df[SURROGATE_FEATURES]
+    groups = train_df["location"]
 
-param_grid = {
-    'n_estimators': [100, 200, 300],
-    'learning_rate': [0.05, 0.1, 0.2],
-    'max_depth': [3, 5, 7],
-    'subsample': [0.7, 0.8, 0.9],
-    'colsample_bytree': [0.7, 0.8, 0.9]
-}
+    all_results = {
+        "holdout_location": HOLDOUT_LOCATION,
+        "training_rows": int(len(train_df)),
+        "test_rows": int(len(test_df)),
+        "features": SURROGATE_FEATURES,
+        "models": {},
+    }
 
-print("\n" + "-" * 70)
-print("GRID SEARCH (this will take a few minutes)")
-print("-" * 70)
+    model_specs = {
+        "efficiency": ("efficiency", MODEL_DIR / "xgboost_efficiency.pkl"),
+        "autonomy": ("autonomy", MODEL_DIR / "xgboost_autonomy.pkl"),
+    }
 
-# ============================================================================
-# TRAIN EFFICIENCY
-# ============================================================================
+    prediction_output = test_df[["location", "design_id"]].copy()
+    for model_name, (target, model_path) in model_specs.items():
+        print(f"\nTraining {model_name} model...")
+        model, best_params, best_cv_r2 = _fit_model(
+            X_train, train_df[target], groups
+        )
+        predictions = model.predict(X_test)
+        test_metrics = _metrics(test_df[target], predictions)
+        joblib.dump(model, model_path)
 
-print("\nTraining Efficiency Model...")
-grid_eff = GridSearchCV(
-    xgb.XGBRegressor(random_state=42),
-    param_grid,
-    cv=5,
-    scoring='r2',
-    n_jobs=-1,
-    verbose=0
-)
-grid_eff.fit(X_train, y_eff_train)
-model_eff = grid_eff.best_estimator_
+        prediction_output[f"actual_{target}"] = test_df[target].to_numpy()
+        prediction_output[f"predicted_{target}"] = predictions
+        prediction_output[f"residual_{target}"] = (
+            test_df[target].to_numpy() - predictions
+        )
 
-y_pred = model_eff.predict(X_test)
-r2_eff = r2_score(y_eff_test, y_pred)
-mae_eff = mean_absolute_error(y_eff_test, y_pred)
+        all_results["models"][model_name] = {
+            "target": target,
+            "best_group_cv_r2": best_cv_r2,
+            "best_parameters": best_params,
+            "holdout_metrics": test_metrics,
+        }
+        print(f"Holdout metrics: {test_metrics}")
 
-print(f"  R2: {r2_eff:.4f} | MAE: {mae_eff:.2f}%")
-print(f"  Best params: {grid_eff.best_params_}")
+    joblib.dump(SURROGATE_FEATURES, MODEL_DIR / "feature_names.pkl")
+    prediction_output.to_csv(RESULT_DIR / "surrogate_holdout_predictions.csv", index=False)
+    with open(RESULT_DIR / "surrogate_metrics.json", "w", encoding="utf-8") as handle:
+        json.dump(all_results, handle, indent=2)
 
-# ============================================================================
-# TRAIN AUTONOMY
-# ============================================================================
+    efficiency_model = joblib.load(MODEL_DIR / "xgboost_efficiency.pkl")
+    importance = pd.DataFrame(
+        {
+            "feature": SURROGATE_FEATURES,
+            "importance": efficiency_model.feature_importances_,
+        }
+    ).sort_values("importance", ascending=False)
+    importance.to_csv(RESULT_DIR / "efficiency_feature_importance.csv", index=False)
 
-print("\nTraining Autonomy Model...")
-grid_auto = GridSearchCV(
-    xgb.XGBRegressor(random_state=42),
-    param_grid,
-    cv=5,
-    scoring='r2',
-    n_jobs=-1,
-    verbose=0
-)
-grid_auto.fit(X_train, y_auto_train)
-model_auto = grid_auto.best_estimator_
+    print(f"\nModels saved to {MODEL_DIR}")
+    print(f"Evaluation artifacts saved to {RESULT_DIR}")
 
-y_pred = model_auto.predict(X_test)
-r2_auto = r2_score(y_auto_test, y_pred)
-mae_auto = mean_absolute_error(y_auto_test, y_pred)
 
-print(f"  R2: {r2_auto:.4f} | MAE: {mae_auto:.2f} days")
-print(f"  Best params: {grid_auto.best_params_}")
-
-# ============================================================================
-# SAVE MODELS
-# ============================================================================
-
-os.makedirs('models', exist_ok=True)
-
-joblib.dump(model_eff, 'models/xgboost_efficiency.pkl')
-joblib.dump(model_auto, 'models/xgboost_autonomy.pkl')
-joblib.dump(features, 'models/feature_names.pkl')
-
-print("\n" + "=" * 70)
-print("MODELS SAVED")
-print("=" * 70)
-print("  models/xgboost_efficiency.pkl")
-print("  models/xgboost_autonomy.pkl")
-print("  models/feature_names.pkl")
-
-# ============================================================================
-# FEATURE IMPORTANCE
-# ============================================================================
-
-print("\n" + "=" * 70)
-print("FEATURE IMPORTANCE (Efficiency)")
-print("=" * 70)
-
-importance = pd.DataFrame({
-    'feature': features,
-    'importance': model_eff.feature_importances_
-}).sort_values('importance', ascending=False)
-
-print(importance.to_string(index=False))
-
-# ============================================================================
-# SUMMARY
-# ============================================================================
-
-print("\n" + "=" * 70)
-print("SUMMARY")
-print("=" * 70)
-print(f"""
-Efficiency:  R2 = {r2_eff:.4f}  | MAE = {mae_eff:.2f}%
-Autonomy:    R2 = {r2_auto:.4f}  | MAE = {mae_auto:.2f} days
-
-Top features for efficiency:
-  1. {importance.iloc[0]['feature']} ({importance.iloc[0]['importance']:.3f})
-  2. {importance.iloc[1]['feature']} ({importance.iloc[1]['importance']:.3f})
-  3. {importance.iloc[2]['feature']} ({importance.iloc[2]['importance']:.3f})
-""")
-
-print("Training complete.")
+if __name__ == "__main__":
+    main()
